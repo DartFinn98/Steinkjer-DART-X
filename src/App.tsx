@@ -52,7 +52,7 @@ function CoinTossButton({ disabled, flipping, landingSide, result, onClick }: Co
 
 const DART_OPTION_GROUPS = [
   { label: 'Bom og bull', options: [
-    { value: 'MISS', label: 'Bom · 0 poeng' },
+    { value: 'MISS', label: 'Miss / bom · 0 poeng' },
     { value: 'SB', label: 'Ytre bull · 25 poeng' },
     { value: 'BULL', label: 'Indre bull · 50 poeng' },
   ] },
@@ -159,6 +159,7 @@ function App() {
   const [coinResult, setCoinResult] = useState<CoinSide | null>(null)
   const [coinFlipping, setCoinFlipping] = useState(false)
   const [coinLandingSide, setCoinLandingSide] = useState<CoinSide | null>(null)
+  const [useCoinToss, setUseCoinToss] = useState(true)
   const coinFlipTimer = useRef<number | null>(null)
   const [players, setPlayers] = useState<Player[]>([])
   const [activePlayer, setActivePlayer] = useState(0)
@@ -175,6 +176,7 @@ function App() {
   const [manualTotal, setManualTotal] = useState('')
   const [manualDartsThrown, setManualDartsThrown] = useState<1 | 2 | 3>(3)
   const [manualLastDartDouble, setManualLastDartDouble] = useState(false)
+  const [manualBust, setManualBust] = useState(false)
   const [checkoutTableOpen, setCheckoutTableOpen] = useState(false)
   const [historySearch, setHistorySearch] = useState('')
   const [historyGameMode, setHistoryGameMode] = useState<GameMode | 'all'>('all')
@@ -338,7 +340,7 @@ function App() {
 
   function beginGame(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (playerCount > 1 && (coinResult === null || coinStarterIndex === null)) return
+    if (playerCount > 1 && useCoinToss && (coinResult === null || coinStarterIndex === null)) return
     const roster = names.map((name, index) => ({
       id: `${Date.now()}-${index}`,
       name: name.trim() || `Spiller ${index + 1}`,
@@ -348,6 +350,7 @@ function App() {
       ...(gameMode === 'cricket' ? { cricketMarks: Object.fromEntries(CRICKET_TARGETS.map((target) => [target, 0])) } : {}),
     }))
     setPlayers(roster)
+    setCoinStarterIndex(playerCount > 1 ? useCoinToss ? coinStarterIndex : 0 : null)
     setActivePlayer(0)
     setLegsWon(Object.fromEntries(roster.map((player) => [player.id, 0])))
     setMatchWinnerId(null)
@@ -359,6 +362,7 @@ function App() {
     setDarts(['', '', ''])
     setManualTotal('')
     setManualLastDartDouble(false)
+    setManualBust(false)
     setMessage('')
     setDatabaseMessage('')
     setEmailReportMessage('')
@@ -484,7 +488,7 @@ function App() {
 
   function startGame() {
     const startingPlayer = players.findIndex((player) => player.id === bullWinnerId)
-    if (startingPlayer < 0 || coinStarterIndex === null) return
+    if (startingPlayer < 0 || (useCoinToss && coinStarterIndex === null)) return
     setActivePlayer(startingPlayer)
     setLegStarterIndex(startingPlayer)
     setGamePhase('playing')
@@ -534,7 +538,7 @@ function App() {
   function beginLegBullOff() {
     if (players.length < 2 || !players.some((player) => player.score === 42)) return
     setCoinResult(null)
-    setCoinStarterIndex(null)
+    setCoinStarterIndex(useCoinToss ? null : 0)
     setBullWinnerId('')
     setGamePhase('leg-bull-off')
   }
@@ -611,13 +615,14 @@ function App() {
       else setWinnerId(null)
       setDarts(['', '', ''])
       setManualTotal('')
+      setManualBust(false)
       setMessage(cricketWinner ? 'Alle feltene er lukket. Kampen er avgjort.' : `${visitPoints > 0 ? `${visitPoints} poeng lagt til.` : 'Treffene er registrert.'}`)
       return
     }
 
     const remaining = currentPlayer.score - total
-    const checkout = remaining === 0 && lastDartIsDouble
-    const bust = remaining < 0 || remaining === 1 || (remaining === 0 && !lastDartIsDouble)
+    const bust = manualBust || remaining < 0 || remaining === 1 || (remaining === 0 && !lastDartIsDouble)
+    const checkout = !bust && remaining === 0 && lastDartIsDouble
     const nextPlayers = players.map((player, index) => {
       const isCurrentPlayer = index === activePlayer
       const sharesTeam = teamMode && player.teamId === currentPlayer.teamId
@@ -635,6 +640,7 @@ function App() {
     setManualTotal('')
     setManualDartsThrown(3)
     setManualLastDartDouble(false)
+    setManualBust(false)
     setMessage(bust ? `${currentPlayer.name} gikk bust. Poengsummen står.` : '')
   }
 
@@ -652,6 +658,7 @@ function App() {
     setManualTotal('')
     setManualDartsThrown(3)
     setManualLastDartDouble(false)
+    setManualBust(false)
     setMessage('Siste tur er angret.')
   }
 
@@ -672,6 +679,7 @@ function App() {
     setManualTotal('')
     setManualDartsThrown(3)
     setManualLastDartDouble(false)
+    setManualBust(false)
     setMessage('')
   }
 
@@ -692,6 +700,7 @@ function App() {
     setManualTotal('')
     setManualDartsThrown(3)
     setManualLastDartDouble(false)
+    setManualBust(false)
     setBullWinnerId('')
     setCoinStarterIndex(null)
     setCoinResult(null)
@@ -842,6 +851,7 @@ function App() {
     if (entryMode === 'total') {
       setManualTotal(String(currentPlayer.score))
       setManualLastDartDouble(true)
+      setManualBust(false)
     } else {
       const route = checkoutHint.split('→').map((dart) => dart.trim())
       const missesBeforeRoute = Array.from({ length: 3 - route.length }, () => 'MISS')
@@ -941,12 +951,13 @@ function App() {
               </> : <p className="player-library-empty">Spillerlisten er tom. Legg til et navn for å begynne.</p>}
             </section>
             {playerCount > 1 && <div className="coin-toss-control">
-              <p className="coin-choice-label">KAST MYNTEN FOR Å TREKKE FØRSTE KASTER</p>
-              <CoinTossButton disabled={false} flipping={coinFlipping} landingSide={coinLandingSide} result={coinResult} onClick={tossCoin} />
-              <p role="status">{coinFlipping ? 'Mynten snurrer …' : coinResult === null ? 'Mynten trekker tilfeldig hvem som kaster først mot bull.' : `${coinResult === 'kron' ? 'Kron' : 'Mynt'} kom opp. ${coinStarterIndex === null ? 'Første kaster er trukket.' : names[coinStarterIndex] || `Spiller ${coinStarterIndex + 1}`} kaster først mot bull.`}</p>
+              <label className="manual-double-toggle"><input type="checkbox" checked={useCoinToss} onChange={(event) => { cancelCoinFlip(); setUseCoinToss(event.target.checked); setCoinResult(null); setCoinStarterIndex(null) }} /><span className="custom-check" aria-hidden="true" />Bruk myntkast</label>
+              {useCoinToss ? <><p className="coin-choice-label">KAST MYNTEN FOR Å TREKKE FØRSTE KASTER</p>
+                <CoinTossButton disabled={false} flipping={coinFlipping} landingSide={coinLandingSide} result={coinResult} onClick={tossCoin} />
+                <p role="status">{coinFlipping ? 'Mynten snurrer …' : coinResult === null ? 'Mynten trekker tilfeldig hvem som kaster først mot bull.' : `${coinResult === 'kron' ? 'Kron' : 'Mynt'} kom opp. ${coinStarterIndex === null ? 'Første kaster er trukket.' : names[coinStarterIndex] || `Spiller ${coinStarterIndex + 1}`} kaster først mot bull.`}</p></> : <p role="status">Myntkast er av. {names[0] || 'Spiller 1'} kaster først mot bull.</p>}
             </div>}
-            <button className="primary-button start-button" type="submit" disabled={playerCount > 1 && coinStarterIndex === null}>{playerCount > 1 ? 'Start bullkast' : 'Start kamp'} <span aria-hidden="true">↗</span></button>
-            <p className="form-note">{playerCount > 1 ? 'Myntkastet bestemmer rekkefølgen for bullkastet. ' : ''}Spillernavn lagres automatisk.</p>
+            <button className="primary-button start-button" type="submit" disabled={playerCount > 1 && useCoinToss && coinStarterIndex === null}>{playerCount > 1 ? 'Start bullkast' : 'Start kamp'} <span aria-hidden="true">↗</span></button>
+            <p className="form-note">{playerCount > 1 ? useCoinToss ? 'Myntkastet bestemmer rekkefølgen for bullkastet. ' : 'Uten myntkast følger rekkefølgen spillerlisten. ' : ''}Spillernavn lagres automatisk.</p>
           </form>
           {savedData.matches.length > 0 && <section className="saved-history" aria-label="Kamphistorikk">
             <div className="saved-history-heading"><div><p className="eyebrow">LAGRET HISTORIKK</p><h2>Kamparkiv</h2></div><span>{filteredSavedMatches.length} / {savedData.matches.length} KAMPER</span></div>
@@ -969,7 +980,7 @@ function App() {
             <p className="eyebrow">FØR KAMP / BULLKAST</p>
             <h1>BULL<span className="title-period">.</span></h1>
             <p className="intro">Kast mot midten. Spilleren som kommer nærmest bull, starter {gameMode === 'cricket' ? 'kampen' : `på ${gameMode}`}.</p>
-            <div className="rules-line"><span>MYNTKAST</span><i /> BESTEMMER KASTEREKKEFØLGEN</div>
+            <div className="rules-line"><span>{useCoinToss ? 'MYNTKAST' : 'SPILLERREKKEFØLGE'}</span><i /> BESTEMMER KASTEREKKEFØLGEN</div>
           </div>
           <div className="bull-off-panel">
             <div className="panel-heading"><div><p className="eyebrow">KASTEREKKEFØLGE</p><h2>Hvem kom nærmest bull?</h2></div><span className="panel-index">BULL / 01</span></div>
@@ -984,17 +995,17 @@ function App() {
           <div className="bull-off-copy">
             <p className="eyebrow">42-REGEL / AVGJØR LEGG</p>
             <h1>BULL<span className="title-period">.</span></h1>
-            <p className="intro">Myntkastet avgjør hvem som kaster mot bull først. Velg spilleren som kommer nærmest.</p>
+            <p className="intro">{useCoinToss ? 'Myntkastet avgjør hvem som kaster mot bull først.' : 'Spillerrekkefølgen avgjør hvem som kaster mot bull først.'} Velg spilleren som kommer nærmest.</p>
             <div className="rules-line"><span>42 IGJEN</span><i /> BULLKAST AVGJØR LEGGVINNEREN</div>
           </div>
           <div className="bull-off-panel">
             <div className="panel-heading"><div><p className="eyebrow">KASTEREKKEFØLGE</p><h2>Hvem kom nærmest bull?</h2></div><span className="panel-index">BULL / 42</span></div>
-            <p className="bull-toss-note">Kast mynten for å trekke første kaster.</p>
-            <CoinTossButton disabled={false} flipping={coinFlipping} landingSide={coinLandingSide} result={coinResult} onClick={tossCoin} />
-            <p className="bull-toss-note" role="status">{coinFlipping ? 'Mynten snurrer …' : coinResult === null ? 'Mynten trekker tilfeldig hvem som kaster først.' : `${coinResult === 'kron' ? 'Kron' : 'Mynt'} kom opp. ${bullThrowOrder[0]?.name} kaster først.`}</p>
+            {useCoinToss ? <><p className="bull-toss-note">Kast mynten for å trekke første kaster.</p>
+              <CoinTossButton disabled={false} flipping={coinFlipping} landingSide={coinLandingSide} result={coinResult} onClick={tossCoin} />
+              <p className="bull-toss-note" role="status">{coinFlipping ? 'Mynten snurrer …' : coinResult === null ? 'Mynten trekker tilfeldig hvem som kaster først.' : `${coinResult === 'kron' ? 'Kron' : 'Mynt'} kom opp. ${bullThrowOrder[0]?.name} kaster først.`}</p></> : <p className="bull-toss-note" role="status">Myntkast er av. {bullThrowOrder[0]?.name} kaster først mot bull.</p>}
             {coinStarterIndex !== null && <ol className="bull-order">{bullThrowOrder.map((player, index) => <li key={player.id}><span className="bull-order-number">{String(index + 1).padStart(2, '0')}</span><strong>{player.name}</strong>{index === 0 && <span className="bull-first-tag">KASTER FØRST</span>}</li>)}</ol>}
             <label className="bull-winner-field"><span>HVEM KOM NÆRMEST BULL?</span><select required value={bullWinnerId} onChange={(event) => setBullWinnerId(event.target.value)}><option value="" disabled>Velg spiller</option>{players.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select></label>
-            <button className="primary-button start-button" type="button" disabled={!bullWinnerId || coinStarterIndex === null} onClick={finishLegBullOff}>Avgjør leggen <span aria-hidden="true">↗</span></button>
+            <button className="primary-button start-button" type="button" disabled={!bullWinnerId || (useCoinToss && coinStarterIndex === null)} onClick={finishLegBullOff}>Avgjør leggen <span aria-hidden="true">↗</span></button>
             <button className="text-button bull-back-button" type="button" onClick={() => { cancelCoinFlip(); setBullWinnerId(''); setCoinStarterIndex(null); setCoinResult(null); setGamePhase('playing') }}>Fortsett å spille</button>
           </div>
         </section>
@@ -1052,9 +1063,9 @@ function App() {
                 <button className="primary-button submit-score" type="submit">Før poeng <span aria-hidden="true">↗</span></button>
               </div>}
               <div className="entry-bottom">
-                {gameMode !== 'cricket' && <div className="quick-scores" aria-label="Hurtigvalg for besøket">{Object.entries(QUICK_VISITS).map(([score, values]) => <button key={score} type="button" onClick={() => { if (entryMode === 'total') setManualTotal(score); else setDarts(values); setMessage('') }}>{score}</button>)}</div>}
+                {gameMode !== 'cricket' && <><div className="quick-scores" aria-label="Hurtigvalg for besøket"><button type="button" onClick={() => { if (entryMode === 'total') { setManualTotal('0'); setManualDartsThrown(3) } else setDarts(['MISS', 'MISS', 'MISS']); setManualBust(false); setMessage('') }}>MISS</button>{Object.entries(QUICK_VISITS).map(([score, values]) => <button key={score} type="button" onClick={() => { if (entryMode === 'total') setManualTotal(score); else setDarts(values); setManualBust(false); setMessage('') }}>{score}</button>)}</div><label className="manual-double-toggle"><input type="checkbox" checked={manualBust} onChange={(event) => setManualBust(event.target.checked)} /><span className="custom-check" aria-hidden="true" />Registrer som bust</label></>}
               </div>
-              <p className="entry-message" aria-live="polite">{message || (gameMode === 'cricket' ? 'Lukk alle feltene og ha minst like mange poeng som motstanderen.' : entryMode === 'total' ? 'Ved utgang må du merke av dersom siste pil traff en dobbel.' : 'Velg enkel, dobbel, trippel eller bom for hver pil.')}</p>
+              <p className="entry-message" aria-live="polite">{message || (gameMode === 'cricket' ? 'Lukk alle feltene og ha minst like mange poeng som motstanderen.' : entryMode === 'total' ? 'Ved utgang må du merke av dersom siste pil traff en dobbel.' : 'Velg enkel, dobbel, trippel eller miss (bom) for hver pil.')}</p>
             </form>
           )}
           <div className="game-footer"><span>{gameMode === 'cricket' ? <>15–20 + BULL <i /> TRE TREFF</> : <>{gameMode} <i /> DOBBEL UT</>}</span><span>ANGRE RULLER TILBAKE SISTE TUR</span></div>
