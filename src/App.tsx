@@ -111,8 +111,6 @@ function App() {
   const [newRosterName, setNewRosterName] = useState('')
   const [rosterSlot, setRosterSlot] = useState(0)
   const [playerPendingDeleteId, setPlayerPendingDeleteId] = useState<string | null>(null)
-  const [setupCoinChoices, setSetupCoinChoices] = useState<Record<number, CoinSide>>({})
-  const [bullCoinChoices, setBullCoinChoices] = useState<Record<string, CoinSide>>({})
   const [coinResult, setCoinResult] = useState<CoinSide | null>(null)
   const [coinFlipping, setCoinFlipping] = useState(false)
   const [coinLandingSide, setCoinLandingSide] = useState<CoinSide | null>(null)
@@ -238,8 +236,6 @@ function App() {
   const roundWordPlural = gameMode === '121' ? 'runder' : 'legger'
   const checkoutHint = currentPlayer && gameMode !== 'cricket' ? getCheckoutHint(currentPlayer.score) : null
   const names = Array.from({ length: playerCount }, (_, index) => playerNames[index] ?? '')
-  const setupCoinChoicesReady = names.every((_, index) => setupCoinChoices[index] !== undefined)
-  const bullCoinChoicesReady = players.length > 0 && players.every((player) => bullCoinChoices[player.id] !== undefined)
   const bullThrowOrder = players.length > 0 && coinStarterIndex !== null
     ? players.map((_, offset) => players[(coinStarterIndex + offset) % players.length])
     : players
@@ -252,7 +248,6 @@ function App() {
       setRosterSlot(0)
     }
     setEntryMode('darts')
-    setSetupCoinChoices({})
     setCoinResult(null)
     setCoinStarterIndex(null)
   }
@@ -268,7 +263,6 @@ function App() {
       ...(gameMode === 'cricket' ? { cricketMarks: Object.fromEntries(CRICKET_TARGETS.map((target) => [target, 0])) } : {}),
     }))
     setPlayers(roster)
-    setBullCoinChoices(Object.fromEntries(roster.map((player, index) => [player.id, setupCoinChoices[index]])))
     setActivePlayer(0)
     setLegsWon(Object.fromEntries(roster.map((player) => [player.id, 0])))
     setMatchWinnerId(null)
@@ -301,34 +295,19 @@ function App() {
   function tossCoin() {
     if (coinFlipTimer.current !== null) return
     const result: CoinSide = Math.random() < 0.5 ? 'kron' : 'mynt'
-    const firstMatchingIndex = gamePhase === 'setup'
-      ? names.findIndex((_, index) => setupCoinChoices[index] === result)
-      : players.findIndex((player) => bullCoinChoices[player.id] === result)
+    const participantCount = gamePhase === 'setup' ? names.length : players.length
+    const firstMatchingIndex = Math.floor(Math.random() * participantCount)
     setCoinResult(null)
     setCoinStarterIndex(null)
     setCoinLandingSide(result)
     setCoinFlipping(true)
     coinFlipTimer.current = window.setTimeout(() => {
       setCoinResult(result)
-      setCoinStarterIndex(firstMatchingIndex < 0 ? null : firstMatchingIndex)
+      setCoinStarterIndex(firstMatchingIndex)
       setCoinFlipping(false)
       setCoinLandingSide(null)
       coinFlipTimer.current = null
     }, 900)
-  }
-
-  function chooseSetupCoinSide(index: number, side: CoinSide) {
-    cancelCoinFlip()
-    setSetupCoinChoices((choices) => ({ ...choices, [index]: side }))
-    setCoinResult(null)
-    setCoinStarterIndex(null)
-  }
-
-  function chooseBullCoinSide(playerId: string, side: CoinSide) {
-    cancelCoinFlip()
-    setBullCoinChoices((choices) => ({ ...choices, [playerId]: side }))
-    setCoinResult(null)
-    setCoinStarterIndex(null)
   }
 
   function selectRosterPlayer(name: string) {
@@ -337,14 +316,9 @@ function App() {
       next[rosterSlot] = name
       return next
     })
-    setSetupCoinChoices((choices) => {
-      const next = { ...choices }
-      delete next[rosterSlot]
-      return next
-    })
+    cancelCoinFlip()
     setCoinResult(null)
     setCoinStarterIndex(null)
-    setCoinResult(null)
     setPlayerPendingDeleteId(null)
     setRosterSlot((rosterSlot + 1) % playerCount)
   }
@@ -459,7 +433,6 @@ function App() {
 
   function beginLegBullOff() {
     if (players.length < 2 || !players.some((player) => player.score === 42)) return
-    setBullCoinChoices({})
     setCoinResult(null)
     setCoinStarterIndex(null)
     setBullWinnerId('')
@@ -582,8 +555,6 @@ function App() {
     setGamePhase('setup')
     setCoinStarterIndex(null)
     setCoinResult(null)
-    setSetupCoinChoices({})
-    setBullCoinChoices({})
     setBullWinnerId('')
     setWinnerId(null)
     setHistory([])
@@ -614,7 +585,6 @@ function App() {
     setBullWinnerId('')
     setCoinStarterIndex(null)
     setCoinResult(null)
-    setBullCoinChoices({})
     setMessage('')
     setEmailReportMessage('')
   }
@@ -670,7 +640,6 @@ function App() {
     setHistory([])
     setGamePhase(match.finishMethod === 'bull-off' ? 'leg-bull-off' : 'playing')
     setBullWinnerId('')
-    setBullCoinChoices({})
     setCoinResult(null)
     setCoinStarterIndex(null)
     setDarts(['', '', ''])
@@ -798,7 +767,7 @@ function App() {
             <div className="panel-heading"><div><p className="eyebrow">NY KAMP</p><h2>Hvem spiller?</h2></div><span className="panel-index">01 — 02</span></div>
             <fieldset className="player-count">
               <legend>ANTALL SPILLERE</legend>
-              <div className="count-options">{[1, 2, 3, 4].filter((count) => gameMode !== 'cricket' || count > 1).map((count) => <button key={count} type="button" aria-pressed={playerCount === count} className={playerCount === count ? 'count-option selected' : 'count-option'} onClick={() => { setPlayerCount(count); setRosterSlot((slot) => Math.min(slot, count - 1)); setSetupCoinChoices({}); setCoinResult(null); setCoinStarterIndex(null) }}>{count}</button>)}</div>
+              <div className="count-options">{[1, 2, 3, 4].filter((count) => gameMode !== 'cricket' || count > 1).map((count) => <button key={count} type="button" aria-pressed={playerCount === count} className={playerCount === count ? 'count-option selected' : 'count-option'} onClick={() => { cancelCoinFlip(); setPlayerCount(count); setRosterSlot((slot) => Math.min(slot, count - 1)); setCoinResult(null); setCoinStarterIndex(null) }}>{count}</button>)}</div>
             </fieldset>
             <fieldset className="match-format game-mode-format">
               <legend>SPILLTYPE</legend>
@@ -813,7 +782,7 @@ function App() {
             <div className="name-fields">{names.map((name, index) => (
               <label className="name-field" key={index}>
                 <span>SPILLER {String(index + 1).padStart(2, '0')}</span>
-                <input autoComplete="off" maxLength={24} placeholder={`Spiller ${index + 1}`} value={name} onChange={(event) => { setPlayerNames((items) => { const next = [...items]; next[index] = event.target.value; return next }); setSetupCoinChoices((choices) => { const next = { ...choices }; delete next[index]; return next }); setCoinResult(null); setCoinStarterIndex(null) }} />
+                <input autoComplete="off" maxLength={24} placeholder={`Spiller ${index + 1}`} value={name} onChange={(event) => { cancelCoinFlip(); setPlayerNames((items) => { const next = [...items]; next[index] = event.target.value; return next }); setCoinResult(null); setCoinStarterIndex(null) }} />
               </label>
             ))}</div>
             <section className="player-library" aria-label="Spillerliste">
@@ -831,10 +800,9 @@ function App() {
               </> : <p className="player-library-empty">Spillerlisten er tom. Legg til et navn for å begynne.</p>}
             </section>
             {playerCount > 1 && <div className="coin-toss-control">
-              <p className="coin-choice-label">VELG KRON ELLER MYNT</p>
-              <div className="coin-guess-list">{names.map((name, index) => <div className="coin-guess-row" key={index}><span>{name || `Spiller ${index + 1}`}</span><div className="coin-choice-buttons"><button type="button" disabled={coinFlipping} aria-pressed={setupCoinChoices[index] === 'kron'} onClick={() => chooseSetupCoinSide(index, 'kron')}>Kron</button><button type="button" disabled={coinFlipping} aria-pressed={setupCoinChoices[index] === 'mynt'} onClick={() => chooseSetupCoinSide(index, 'mynt')}>Mynt</button></div></div>)}</div>
-              <CoinTossButton disabled={!setupCoinChoicesReady} flipping={coinFlipping} landingSide={coinLandingSide} result={coinResult} onClick={tossCoin} />
-              <p role="status">{coinFlipping ? 'Mynten snurrer …' : coinResult === null ? setupCoinChoicesReady ? 'Alle har valgt. Kast mynten for å se hvem som kaster først.' : 'Velg Kron eller Mynt for hver spiller.' : coinStarterIndex === null ? `${coinResult === 'kron' ? 'Kron' : 'Mynt'} kom opp, men ingen valgte denne siden. Endre valgene og kast igjen.` : `${coinResult === 'kron' ? 'Kron' : 'Mynt'} kom opp. ${names[coinStarterIndex] || `Spiller ${coinStarterIndex + 1}`} kaster først mot bull.`}</p>
+              <p className="coin-choice-label">KAST MYNTEN FOR Å TREKKE FØRSTE KASTER</p>
+              <CoinTossButton disabled={false} flipping={coinFlipping} landingSide={coinLandingSide} result={coinResult} onClick={tossCoin} />
+              <p role="status">{coinFlipping ? 'Mynten snurrer …' : coinResult === null ? 'Mynten trekker tilfeldig hvem som kaster først mot bull.' : `${coinResult === 'kron' ? 'Kron' : 'Mynt'} kom opp. ${coinStarterIndex === null ? 'Første kaster er trukket.' : names[coinStarterIndex] || `Spiller ${coinStarterIndex + 1}`} kaster først mot bull.`}</p>
             </div>}
             <button className="primary-button start-button" type="submit" disabled={playerCount > 1 && coinStarterIndex === null}>{playerCount > 1 ? 'Start bullkast' : 'Start kamp'} <span aria-hidden="true">↗</span></button>
             <p className="form-note">{playerCount > 1 ? 'Myntkastet bestemmer rekkefølgen for bullkastet. ' : ''}Spillernavn lagres automatisk.</p>
@@ -876,13 +844,13 @@ function App() {
           </div>
           <div className="bull-off-panel">
             <div className="panel-heading"><div><p className="eyebrow">KASTEREKKEFØLGE</p><h2>Hvem kom nærmest bull?</h2></div><span className="panel-index">BULL / 42</span></div>
-            <div className="coin-guess-list bull-guess-list">{players.map((player) => <div className="coin-guess-row" key={player.id}><span>{player.name}</span><div className="coin-choice-buttons"><button type="button" disabled={coinFlipping} aria-pressed={bullCoinChoices[player.id] === 'kron'} onClick={() => chooseBullCoinSide(player.id, 'kron')}>Kron</button><button type="button" disabled={coinFlipping} aria-pressed={bullCoinChoices[player.id] === 'mynt'} onClick={() => chooseBullCoinSide(player.id, 'mynt')}>Mynt</button></div></div>)}</div>
-            <CoinTossButton disabled={!bullCoinChoicesReady} flipping={coinFlipping} landingSide={coinLandingSide} result={coinResult} onClick={tossCoin} />
-            <p className="bull-toss-note" role="status">{coinFlipping ? 'Mynten snurrer …' : coinResult === null ? bullCoinChoicesReady ? 'Alle har valgt. Kast mynten for å se hvem som kaster først.' : 'Velg Kron eller Mynt for hver spiller.' : coinStarterIndex === null ? `${coinResult === 'kron' ? 'Kron' : 'Mynt'} kom opp, men ingen valgte denne siden. Endre valgene og kast igjen.` : `${coinResult === 'kron' ? 'Kron' : 'Mynt'} kom opp. ${bullThrowOrder[0]?.name} kaster først.`}</p>
+            <p className="bull-toss-note">Kast mynten for å trekke første kaster.</p>
+            <CoinTossButton disabled={false} flipping={coinFlipping} landingSide={coinLandingSide} result={coinResult} onClick={tossCoin} />
+            <p className="bull-toss-note" role="status">{coinFlipping ? 'Mynten snurrer …' : coinResult === null ? 'Mynten trekker tilfeldig hvem som kaster først.' : `${coinResult === 'kron' ? 'Kron' : 'Mynt'} kom opp. ${bullThrowOrder[0]?.name} kaster først.`}</p>
             {coinStarterIndex !== null && <ol className="bull-order">{bullThrowOrder.map((player, index) => <li key={player.id}><span className="bull-order-number">{String(index + 1).padStart(2, '0')}</span><strong>{player.name}</strong>{index === 0 && <span className="bull-first-tag">KASTER FØRST</span>}</li>)}</ol>}
             <label className="bull-winner-field"><span>HVEM KOM NÆRMEST BULL?</span><select required value={bullWinnerId} onChange={(event) => setBullWinnerId(event.target.value)}><option value="" disabled>Velg spiller</option>{players.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select></label>
             <button className="primary-button start-button" type="button" disabled={!bullWinnerId || coinStarterIndex === null} onClick={finishLegBullOff}>Avgjør leggen <span aria-hidden="true">↗</span></button>
-            <button className="text-button bull-back-button" type="button" onClick={() => { cancelCoinFlip(); setBullWinnerId(''); setCoinStarterIndex(null); setCoinResult(null); setBullCoinChoices({}); setGamePhase('playing') }}>Fortsett å spille 501</button>
+            <button className="text-button bull-back-button" type="button" onClick={() => { cancelCoinFlip(); setBullWinnerId(''); setCoinStarterIndex(null); setCoinResult(null); setGamePhase('playing') }}>Fortsett å spille</button>
           </div>
         </section>
       ) : (
