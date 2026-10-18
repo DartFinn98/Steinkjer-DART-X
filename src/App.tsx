@@ -70,6 +70,11 @@ const QUICK_VISITS: Record<number, DartInputs> = {
   180: ['T20', 'T20', 'T20'],
 }
 
+const CHECKOUT_TABLE = Array.from({ length: 169 }, (_, index) => 170 - index).flatMap((score) => {
+  const route = getCheckoutHint(score)
+  return route ? [{ score, route: route.replace(/\s+→\s+/g, ' → ') }] : []
+})
+
 function parseDartNotation(value: string): ScoredDart | null {
   const notation = value.trim().toUpperCase().replace(/\s/g, '')
   if (notation === 'MISS' || notation === '0') return { points: 0, isDouble: false, target: null, marks: 0 }
@@ -146,6 +151,7 @@ function App() {
   const [manualTotal, setManualTotal] = useState('')
   const [manualDartsThrown, setManualDartsThrown] = useState<1 | 2 | 3>(3)
   const [manualLastDartDouble, setManualLastDartDouble] = useState(false)
+  const [checkoutTableOpen, setCheckoutTableOpen] = useState(false)
   const [scoreEditPlayerId, setScoreEditPlayerId] = useState<string | null>(null)
   const [scoreEditInput, setScoreEditInput] = useState('')
   const [scoreEditLastDartDouble, setScoreEditLastDartDouble] = useState(false)
@@ -964,6 +970,8 @@ function App() {
           ) : (
             <form className="score-entry" onSubmit={recordVisit}>
               <div className="entry-title"><div><p className="eyebrow">{gameMode === 'cricket' ? 'REGISTRER TREFF' : 'REGISTRER POENG'}</p><h2>{currentPlayer?.name}<span> sin tur</span></h2></div><span className="dart-counter">{entryMode === 'total' && gameMode !== 'cricket' ? 'TOTALSUM' : '3 KAST'}</span></div>
+              {gameMode === '501' && <button className="checkout-table-toggle" type="button" aria-expanded={checkoutTableOpen} aria-controls="checkout-table" onClick={() => setCheckoutTableOpen((open) => !open)}><span aria-hidden="true">{checkoutTableOpen ? '−' : '+'}</span>{checkoutTableOpen ? 'Skjul utgangstabell' : 'Utgangstabell'}</button>}
+              {gameMode === '501' && <section className="checkout-table" id="checkout-table" aria-label="Utgangstabell for 501 med dobbel ut" hidden={!checkoutTableOpen}><div className="checkout-table-heading"><strong>501 · DOBBEL UT</strong><span>Utganger fra 2 til 170</span></div><div className="checkout-table-grid">{CHECKOUT_TABLE.map(({ score, route }) => <div className="checkout-table-row" key={score}><strong>{score}</strong><span>{route}</span></div>)}</div></section>}
               {gameMode !== 'cricket' && currentPlayer && currentPlayer.score <= 170 && <div className="checkout-hint" aria-live="polite"><div className="checkout-hint-copy"><span>UTGANGSFORSLAG</span><strong>{checkoutHint ?? 'Ingen utgang på tre piler'}</strong></div>{checkoutHint && <button className="checkout-apply" type="button" onClick={applyCheckoutSuggestion}>Bruk forslag</button>}</div>}
               {gameMode === 'cricket' ? <p className="cricket-entry-note">Registrer treff på 15–20 og bull for hver pil. Trippel gir tre treff, dobbel bull gir to.</p> : <div className="entry-mode" role="group" aria-label="Registreringsmåte"><button type="button" aria-pressed={entryMode === 'darts'} onClick={() => setEntryMode('darts')}>Velg piler</button><button type="button" aria-pressed={entryMode === 'total'} onClick={() => setEntryMode('total')}>Skriv totalsum</button></div>}
               {entryMode === 'darts' || gameMode === 'cricket' ? <div className="dart-inputs">{darts.map((dart, index) => (

@@ -226,6 +226,16 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .checkout-hint-copy { min-width: 0; display: grid; gap: 5px; }
 .checkout-hint-copy > span { color: var(--muted); font: 10px var(--mono); letter-spacing: 1px; }
 .checkout-hint-copy > strong { color: var(--green); font: 700 15px var(--mono); }
+.checkout-table-toggle { min-height: 32px; display: inline-flex; align-items: center; gap: 7px; margin: -5px 0 11px; padding: 0; border: 0; background: transparent; color: var(--green); font-size: 11px; font-weight: 700; cursor: pointer; }
+.checkout-table-toggle > span { width: 16px; display: inline-grid; place-items: center; color: var(--orange); font: 17px var(--mono); }
+.checkout-table { max-height: 230px; overflow-y: auto; margin: -2px 0 14px; border: 1px solid var(--line); background: #fffefa; }
+.checkout-table-heading { position: sticky; top: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 11px; border-bottom: 1px solid var(--line); background: #f4f1e9; }
+.checkout-table-heading strong, .checkout-table-heading span { color: var(--muted); font: 9px var(--mono); }
+.checkout-table-heading span { text-align: right; }
+.checkout-table-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.checkout-table-row { min-width: 0; display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: start; gap: 7px; padding: 5px 9px; border-bottom: 1px solid #d9d7ce88; }
+.checkout-table-row strong { color: var(--green); font: 700 10px var(--mono); font-variant-numeric: tabular-nums; }
+.checkout-table-row > span { color: var(--ink); font: 9px/1.3 var(--mono); overflow-wrap: anywhere; }
 .checkout-apply { min-height: 36px; flex: none; padding: 0 12px; border: 1px solid var(--green); background: transparent; color: var(--green); font-size: 11px; font-weight: 700; cursor: pointer; }
 .checkout-apply:hover { background: var(--green); color: white; }
 .entry-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
