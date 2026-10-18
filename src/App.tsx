@@ -846,6 +846,17 @@ function App() {
     setMessage('')
   }
 
+  function setManualVisitTotal(value: string, dartsThrown: 1 | 2 | 3 = manualDartsThrown) {
+    setManualTotal(value)
+    setManualLastDartDouble(
+      value.trim() !== ''
+      && Number(value) === currentPlayer?.score
+      && checkoutHint !== null
+      && checkoutHint.split('→').length <= dartsThrown,
+    )
+    setMessage('')
+  }
+
   function applyCheckoutSuggestion() {
     if (!currentPlayer || !checkoutHint) return
     if (entryMode === 'total') {
@@ -1057,15 +1068,15 @@ function App() {
               {entryMode === 'darts' || gameMode === 'cricket' ? <div className="dart-inputs">{darts.map((dart, index) => (
                 <label className="dart-input" key={index}><span>PIL {index + 1}</span><select aria-label={`Velg kast for pil ${index + 1}`} required value={dart} onChange={(event) => changeDart(index, event.target.value)}><option value="" disabled>Velg kast</option>{(gameMode === 'cricket' ? CRICKET_DART_OPTION_GROUPS : DART_OPTION_GROUPS).map((group) => <optgroup key={group.label} label={group.label}>{group.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</optgroup>)}</select></label>
               ))}<div className="visit-total"><span>TOTAL</span><strong>{darts.reduce((sum, value) => sum + (parseDartNotation(value)?.points ?? 0), 0)}</strong></div><button className="primary-button submit-score" type="submit">Før poeng <span aria-hidden="true">↗</span></button></div> : <div className="manual-score-entry">
-                <label className="manual-score-field"><span>TOTALSUM · 0–180</span><input aria-label="Totalsum for turen" autoComplete="off" inputMode="numeric" type="number" min="0" max="180" step="1" required value={manualTotal} onChange={(event) => { setManualTotal(event.target.value); setMessage('') }} placeholder="0" /></label>
-                <label className="manual-darts-field"><span>PILER BRUKT</span><select aria-label="Antall piler brukt" value={manualDartsThrown} onChange={(event) => setManualDartsThrown(Number(event.target.value) as 1 | 2 | 3)}><option value={1}>1 pil</option><option value={2}>2 piler</option><option value={3}>3 piler</option></select></label>
+                <label className="manual-score-field"><span>TOTALSUM · 0–180</span><input aria-label="Totalsum for turen" autoComplete="off" inputMode="numeric" type="number" min="0" max="180" step="1" required value={manualTotal} onChange={(event) => setManualVisitTotal(event.target.value)} placeholder="0" /></label>
+                <label className="manual-darts-field"><span>PILER BRUKT</span><select aria-label="Antall piler brukt" value={manualDartsThrown} onChange={(event) => { const dartsThrown = Number(event.target.value) as 1 | 2 | 3; setManualDartsThrown(dartsThrown); setManualVisitTotal(manualTotal, dartsThrown) }}><option value={1}>1 pil</option><option value={2}>2 piler</option><option value={3}>3 piler</option></select></label>
                 <label className="manual-double-toggle"><input type="checkbox" checked={manualLastDartDouble} onChange={(event) => setManualLastDartDouble(event.target.checked)} /><span className="custom-check" aria-hidden="true" />Siste pil var dobbel</label>
                 <button className="primary-button submit-score" type="submit">Før poeng <span aria-hidden="true">↗</span></button>
               </div>}
               <div className="entry-bottom">
-                {gameMode !== 'cricket' && <><div className="quick-scores" aria-label="Hurtigvalg for besøket"><button type="button" onClick={() => { if (entryMode === 'total') { setManualTotal('0'); setManualDartsThrown(3) } else setDarts(['MISS', 'MISS', 'MISS']); setManualBust(false); setMessage('') }}>MISS</button>{Object.entries(QUICK_VISITS).map(([score, values]) => <button key={score} type="button" onClick={() => { if (entryMode === 'total') setManualTotal(score); else setDarts(values); setManualBust(false); setMessage('') }}>{score}</button>)}</div><label className="manual-double-toggle"><input type="checkbox" checked={manualBust} onChange={(event) => setManualBust(event.target.checked)} /><span className="custom-check" aria-hidden="true" />Registrer som bust</label></>}
+                {gameMode !== 'cricket' && <><div className="quick-scores" aria-label="Hurtigvalg for besøket"><button type="button" onClick={() => { if (entryMode === 'total') { setManualDartsThrown(3); setManualVisitTotal('0', 3) } else setDarts(['MISS', 'MISS', 'MISS']); setManualBust(false); setMessage('') }}>MISS</button>{Object.entries(QUICK_VISITS).map(([score, values]) => <button key={score} type="button" onClick={() => { if (entryMode === 'total') { setManualDartsThrown(3); setManualVisitTotal(score, 3) } else setDarts(values); setManualBust(false); setMessage('') }}>{score}</button>)}</div><label className="manual-double-toggle"><input type="checkbox" checked={manualBust} onChange={(event) => setManualBust(event.target.checked)} /><span className="custom-check" aria-hidden="true" />Registrer som bust</label></>}
               </div>
-              <p className="entry-message" aria-live="polite">{message || (gameMode === 'cricket' ? 'Lukk alle feltene og ha minst like mange poeng som motstanderen.' : entryMode === 'total' ? 'Ved utgang må du merke av dersom siste pil traff en dobbel.' : 'Velg enkel, dobbel, trippel eller miss (bom) for hver pil.')}</p>
+              <p className="entry-message" aria-live="polite">{message || (gameMode === 'cricket' ? 'Lukk alle feltene og ha minst like mange poeng som motstanderen.' : entryMode === 'total' ? 'Ved totalsum lik poengene du har igjen, markeres dobbel automatisk. Du kan endre avhukingen ved behov.' : 'Velg enkel, dobbel, trippel eller miss (bom) for hver pil.')}</p>
             </form>
           )}
           <div className="game-footer"><span>{gameMode === 'cricket' ? <>15–20 + BULL <i /> TRE TREFF</> : <>{gameMode} <i /> DOBBEL UT</>}</span><span>ANGRE RULLER TILBAKE SISTE TUR</span></div>
