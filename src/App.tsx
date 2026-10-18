@@ -899,7 +899,7 @@ function App() {
         </a>
         <div className="topbar-meta">{isOnline ? <span className="live-dot" /> : <span className="offline-dot" />} {isOnline ? gameMode === 'cricket' ? 'CRICKET' : `${gameMode} / DOBBEL UT` : 'OFFLINE'} <span className="court-indicator">BANE {courtNumber}</span> {session && <button className="sign-out-button" type="button" onClick={signOut}>Logg ut</button>}{!supabase && <span className="local-mode-tag">LOKAL MODUS</span>}</div>
       </header>
-      {databaseMessage && <p className="database-message" role="status">{databaseMessage}</p>}
+      {databaseMessage && <div className="database-message" role="status"><span>{databaseMessage}</span><button type="button" aria-label="Skjul varsel" onClick={() => setDatabaseMessage('')}>Lukk</button></div>}
 
       {players.length === 0 ? (
         <section className="setup-layout">

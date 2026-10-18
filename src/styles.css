@@ -34,7 +34,8 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .court-indicator { padding: 4px 6px; border: 1px solid var(--line); color: var(--green); font: 9px var(--mono); white-space: nowrap; }
 .local-mode-tag { padding: 4px 6px; border: 1px solid var(--line); color: var(--muted); font-size: 8px; }
 .offline-dot { display: inline-block; width: 7px; aspect-ratio: 1; border-radius: 50%; background: var(--orange); box-shadow: 0 0 0 3px #ec68481c; }
-.database-message { max-width: 1180px; margin: 12px auto 0; color: var(--orange); font-size: 12px; }
+.database-message { max-width: 1180px; margin: 12px auto 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; color: var(--orange); font-size: 12px; }
+.database-message button { flex: none; padding: 0; border: 0; background: transparent; color: var(--green); font: inherit; font-weight: 700; cursor: pointer; }
 .live-dot { display: inline-block; width: 7px; aspect-ratio: 1; border-radius: 50%; background: #5a9c67; box-shadow: 0 0 0 3px #5a9c671c; }
 .setup-layout { position: relative; min-height: calc(100vh - 120px); display: grid; grid-template-columns: 1fr 390px; align-items: center; gap: 8vw; max-width: 1180px; margin: 0 auto; padding: 55px 0 80px; }
 .bull-off-layout { position: relative; min-height: calc(100vh - 120px); display: grid; grid-template-columns: 1fr 430px; align-items: center; gap: 7vw; max-width: 1180px; margin: 0 auto; padding: 55px 0 80px; }
