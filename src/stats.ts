@@ -18,6 +18,7 @@ export type PlayerMatchStats = {
   tons: number
   oneEighties: number
   highestVisit: number
+  fastestCheckoutDarts: number | null
   visits: VisitForStats[]
 }
 
@@ -31,6 +32,16 @@ type PlayerForStats = {
 export function summarizePlayer(player: PlayerForStats, legsWon: number): PlayerMatchStats {
   const pointsScored = player.visits.reduce((total, visit) => total + (visit.bust ? 0 : visit.total), 0)
   const dartsThrown = player.visits.reduce((total, visit) => total + visit.dartsThrown, 0)
+  const dartsByLeg = new Map<number, number>()
+  let fastestCheckoutDarts: number | null = null
+
+  for (const visit of player.visits) {
+    const legDarts = (dartsByLeg.get(visit.legNumber) ?? 0) + visit.dartsThrown
+    dartsByLeg.set(visit.legNumber, legDarts)
+    if (visit.checkout && (fastestCheckoutDarts === null || legDarts < fastestCheckoutDarts)) {
+      fastestCheckoutDarts = legDarts
+    }
+  }
 
   return {
     name: player.name,
@@ -42,6 +53,7 @@ export function summarizePlayer(player: PlayerForStats, legsWon: number): Player
     tons: player.visits.filter((visit) => !visit.bust && visit.total >= 100).length,
     oneEighties: player.visits.filter((visit) => !visit.bust && visit.total === 180).length,
     highestVisit: Math.max(0, ...player.visits.filter((visit) => !visit.bust).map((visit) => visit.total)),
+    fastestCheckoutDarts,
     visits: player.visits,
   }
 }

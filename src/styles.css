@@ -210,6 +210,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .leg-pip.earned { background: var(--green); }
 .legs-progress > span { color: var(--muted); font: 9px var(--mono); letter-spacing: .8px; }
 .player-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; padding: 10px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.player-stats.has-fastest-checkout { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .player-stats > div { min-width: 0; display: grid; gap: 4px; }
 .player-stats strong { color: var(--green); font: 600 15px var(--mono); font-variant-numeric: tabular-nums; }
 .player-stats > div:first-child strong { font-size: 17px; }
