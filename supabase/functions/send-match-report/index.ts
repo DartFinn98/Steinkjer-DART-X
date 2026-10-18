@@ -31,7 +31,7 @@ type PlayerStats = {
 type MatchReport = {
   playedAt: string
   winnerName: string
-  bestOfLegs: 3 | 5 | 7
+  bestOfLegs: 3 | 5 | 7 | 9
   players: PlayerStats[]
 }
 
@@ -90,7 +90,7 @@ Deno.serve(async (request) => {
   let report: MatchReport
   try {
     report = await request.json()
-    if (!report.winnerName || !Array.isArray(report.players) || ![3, 5, 7].includes(report.bestOfLegs)) {
+    if (!report.winnerName || !Array.isArray(report.players) || ![3, 5, 7, 9].includes(report.bestOfLegs)) {
       return Response.json({ error: 'Invalid match report.' }, { status: 400, headers: corsHeaders })
     }
   } catch {

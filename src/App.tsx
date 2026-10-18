@@ -151,7 +151,7 @@ function App() {
   const [teamMode, setTeamMode] = useState(false)
   const teamPreviousPlayerCount = useRef(2)
   const [courtNumber, setCourtNumber] = useState<CourtNumber>(getSavedCourtNumber)
-  const [bestOfLegs, setBestOfLegs] = useState<3 | 5 | 7>(3)
+  const [bestOfLegs, setBestOfLegs] = useState<3 | 5 | 7 | 9>(3)
   const [playerNames, setPlayerNames] = useState<string[]>(['', ''])
   const [newRosterName, setNewRosterName] = useState('')
   const [rosterSlot, setRosterSlot] = useState(0)
@@ -923,7 +923,7 @@ function App() {
             </fieldset>
             <fieldset className="match-format">
               <legend>KAMPFORMAT</legend>
-              <div className="format-options">{([3, 5, 7] as const).map((format) => <button key={format} type="button" aria-pressed={bestOfLegs === format} className={bestOfLegs === format ? 'format-option selected' : 'format-option'} onClick={() => setBestOfLegs(format)}>Best av {format}</button>)}</div>
+              <div className="format-options">{([3, 5, 7, 9] as const).map((format) => <button key={format} type="button" aria-pressed={bestOfLegs === format} className={bestOfLegs === format ? 'format-option selected' : 'format-option'} onClick={() => setBestOfLegs(format)}>Best av {format}</button>)}</div>
               <p>Først til {Math.ceil(bestOfLegs / 2)} {gameMode === '121' ? Math.ceil(bestOfLegs / 2) === 1 ? 'runde' : roundWordPlural : Math.ceil(bestOfLegs / 2) === 1 ? 'legg' : roundWordPlural} vinner kampen.</p>
             </fieldset>
             <fieldset className="court-select">

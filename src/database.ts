@@ -13,7 +13,7 @@ export type SavedMatch = {
   winnerName: string
   courtNumber?: 1 | 2 | 3 | 4 | 5
   gameMode?: '501' | 'cricket' | '121'
-  bestOfLegs?: 3 | 5 | 7
+  bestOfLegs?: 3 | 5 | 7 | 9
   finishMethod?: 'checkout' | 'bull-off'
   legStarterName?: string
   players: PlayerMatchStats[]
@@ -189,7 +189,7 @@ export async function loadSavedData(): Promise<SavedData> {
         winnerName: match.winner_name,
         courtNumber: match.court_number as SavedMatch['courtNumber'],
         gameMode: match.game_mode as SavedMatch['gameMode'],
-        bestOfLegs: match.best_of_legs as 3 | 5 | 7 | undefined,
+        bestOfLegs: match.best_of_legs as 3 | 5 | 7 | 9 | undefined,
         finishMethod: match.finish_method as SavedMatch['finishMethod'],
         legStarterName: match.leg_starter_name ?? undefined,
         players: match.players as SavedMatch['players'],
