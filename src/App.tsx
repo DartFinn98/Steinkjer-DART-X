@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { getCheckoutHint } from './checkout'
 import { deleteSavedPlayer, loadSavedData, saveFinishedMatch, savePlayers, sendMatchReport, syncPendingChanges } from './database'
@@ -18,6 +18,25 @@ type Snapshot = { players: Player[]; activePlayer: number; winnerId: string | nu
 type EntryMode = 'darts' | 'total'
 type GamePhase = 'setup' | 'bull-off' | 'leg-bull-off' | 'playing'
 type CoinSide = 'kron' | 'mynt'
+type CoinTossButtonProps = {
+  disabled: boolean
+  flipping: boolean
+  landingSide: CoinSide | null
+  result: CoinSide | null
+  onClick: () => void
+}
+
+function CoinTossButton({ disabled, flipping, landingSide, result, onClick }: CoinTossButtonProps) {
+  const coinSide = flipping ? landingSide : result
+  const coinClass = flipping
+    ? `coin-mark is-flipping spin-to-${landingSide}`
+    : `coin-mark${coinSide ? ` landed-${coinSide}` : ''}`
+
+  return <button className="coin-toss-button" type="button" disabled={disabled || flipping} onClick={onClick}>
+    <span className={coinClass} aria-hidden="true"><span className="coin-face coin-face-kron">KRON</span><span className="coin-face coin-face-mynt">MYNT</span></span>
+    <span>{flipping ? 'Mynten snurrer …' : 'Kast en mynt'}</span>
+  </button>
+}
 
 const DART_OPTION_GROUPS = [
   { label: 'Bom og bull', options: [
@@ -95,6 +114,9 @@ function App() {
   const [setupCoinChoices, setSetupCoinChoices] = useState<Record<number, CoinSide>>({})
   const [bullCoinChoices, setBullCoinChoices] = useState<Record<string, CoinSide>>({})
   const [coinResult, setCoinResult] = useState<CoinSide | null>(null)
+  const [coinFlipping, setCoinFlipping] = useState(false)
+  const [coinLandingSide, setCoinLandingSide] = useState<CoinSide | null>(null)
+  const coinFlipTimer = useRef<number | null>(null)
   const [players, setPlayers] = useState<Player[]>([])
   const [activePlayer, setActivePlayer] = useState(0)
   const [legsWon, setLegsWon] = useState<Record<string, number>>({})
@@ -211,6 +233,9 @@ function App() {
   const scoreEditPlayer = players.find((player) => player.id === scoreEditPlayerId)
   const legsToWin = Math.ceil(bestOfLegs / 2)
   const legNumber = Object.values(legsWon).reduce((total, count) => total + count, 0) + 1
+  const roundWord = gameMode === '121' ? 'RUNDE' : 'LEGG'
+  const roundWordLower = gameMode === '121' ? 'runde' : 'legg'
+  const roundWordPlural = gameMode === '121' ? 'runder' : 'legger'
   const checkoutHint = currentPlayer && gameMode !== 'cricket' ? getCheckoutHint(currentPlayer.score) : null
   const names = Array.from({ length: playerCount }, (_, index) => playerNames[index] ?? '')
   const setupCoinChoicesReady = names.every((_, index) => setupCoinChoices[index] !== undefined)
@@ -220,6 +245,7 @@ function App() {
     : players
 
   function selectGameMode(mode: GameMode) {
+    cancelCoinFlip()
     setGameMode(mode)
     if (mode === 'cricket' && playerCount === 1) {
       setPlayerCount(2)
@@ -263,22 +289,43 @@ function App() {
     })
   }
 
+  function cancelCoinFlip() {
+    if (coinFlipTimer.current !== null) {
+      window.clearTimeout(coinFlipTimer.current)
+      coinFlipTimer.current = null
+    }
+    setCoinFlipping(false)
+    setCoinLandingSide(null)
+  }
+
   function tossCoin() {
+    if (coinFlipTimer.current !== null) return
     const result: CoinSide = Math.random() < 0.5 ? 'kron' : 'mynt'
     const firstMatchingIndex = gamePhase === 'setup'
       ? names.findIndex((_, index) => setupCoinChoices[index] === result)
       : players.findIndex((player) => bullCoinChoices[player.id] === result)
-    setCoinResult(result)
-    setCoinStarterIndex(firstMatchingIndex < 0 ? null : firstMatchingIndex)
+    setCoinResult(null)
+    setCoinStarterIndex(null)
+    setCoinLandingSide(result)
+    setCoinFlipping(true)
+    coinFlipTimer.current = window.setTimeout(() => {
+      setCoinResult(result)
+      setCoinStarterIndex(firstMatchingIndex < 0 ? null : firstMatchingIndex)
+      setCoinFlipping(false)
+      setCoinLandingSide(null)
+      coinFlipTimer.current = null
+    }, 900)
   }
 
   function chooseSetupCoinSide(index: number, side: CoinSide) {
+    cancelCoinFlip()
     setSetupCoinChoices((choices) => ({ ...choices, [index]: side }))
     setCoinResult(null)
     setCoinStarterIndex(null)
   }
 
   function chooseBullCoinSide(playerId: string, side: CoinSide) {
+    cancelCoinFlip()
     setBullCoinChoices((choices) => ({ ...choices, [playerId]: side }))
     setCoinResult(null)
     setCoinStarterIndex(null)
@@ -526,6 +573,7 @@ function App() {
   }
 
   function newGame() {
+    cancelCoinFlip()
     setPlayers([])
     setActivePlayer(0)
     setLegsWon({})
@@ -743,7 +791,7 @@ function App() {
           <div className="setup-copy">
             <p className="eyebrow">KAMPROM / 01</p>
             <h1>{gameMode === 'cricket' ? 'Cricket' : gameMode}<span className="title-period">.</span></h1>
-            <p className="intro">{gameMode === 'cricket' ? 'Lukk feltene fra 15 til 20 og bull før motstanderen.' : gameMode === '121' ? 'Start på 121. Førstemann til dobbel ut vinner leggen.' : 'Følg poengene. Se hvem som leder.'}</p>
+            <p className="intro">{gameMode === 'cricket' ? 'Lukk feltene fra 15 til 20 og bull før motstanderen.' : gameMode === '121' ? 'Start på 121 poeng. Avslutt med en dobbel.' : 'Følg poengene. Se hvem som leder.'}</p>
             <div className="rules-line"><span>{gameMode === 'cricket' ? '15–20 + BULL' : gameMode}</span><i /> {gameMode === 'cricket' ? 'TRE TREFF LUKKER' : 'DOBBEL UT'} <i /> {gameMode === 'cricket' ? 'FLERE POENG VINNER' : 'FØRST TIL NULL'}</div>
           </div>
           <form className="setup-panel" onSubmit={beginGame}>
@@ -755,12 +803,12 @@ function App() {
             <fieldset className="match-format game-mode-format">
               <legend>SPILLTYPE</legend>
               <div className="game-mode-options">{([{ id: '501', label: '501' }, { id: 'cricket', label: 'Cricket' }, { id: '121', label: '121 utgang' }] as const).map((mode) => <button key={mode.id} type="button" aria-pressed={gameMode === mode.id} className={gameMode === mode.id ? 'format-option selected' : 'format-option'} onClick={() => selectGameMode(mode.id)}>{mode.label}</button>)}</div>
-              <p>{gameMode === 'cricket' ? 'Tre treff lukker 15–20 og bull. Treff på lukkede felt gir poeng så lenge motstanderen har feltet åpent.' : gameMode === '121' ? 'Hver legg starter på 121 og følger vanlig dobbelt-ut-regel.' : 'Først til valgt antall legger vinner kampen.'}</p>
+              <p>{gameMode === 'cricket' ? 'Tre treff lukker 15–20 og bull. Treff på lukkede felt gir poeng så lenge motstanderen har feltet åpent.' : gameMode === '121' ? 'Hver runde starter på 121. Dobbel ut gjelder.' : 'Først til valgt antall legger vinner kampen.'}</p>
             </fieldset>
             <fieldset className="match-format">
               <legend>KAMPFORMAT</legend>
               <div className="format-options">{([3, 5, 7] as const).map((format) => <button key={format} type="button" aria-pressed={bestOfLegs === format} className={bestOfLegs === format ? 'format-option selected' : 'format-option'} onClick={() => setBestOfLegs(format)}>Best av {format}</button>)}</div>
-              <p>Først til {Math.ceil(bestOfLegs / 2)} {Math.ceil(bestOfLegs / 2) === 1 ? 'legg' : 'legger'} vinner kampen.</p>
+              <p>Først til {Math.ceil(bestOfLegs / 2)} {gameMode === '121' ? Math.ceil(bestOfLegs / 2) === 1 ? 'runde' : roundWordPlural : Math.ceil(bestOfLegs / 2) === 1 ? 'legg' : roundWordPlural} vinner kampen.</p>
             </fieldset>
             <div className="name-fields">{names.map((name, index) => (
               <label className="name-field" key={index}>
@@ -784,9 +832,9 @@ function App() {
             </section>
             {playerCount > 1 && <div className="coin-toss-control">
               <p className="coin-choice-label">VELG KRON ELLER MYNT</p>
-              <div className="coin-guess-list">{names.map((name, index) => <div className="coin-guess-row" key={index}><span>{name || `Spiller ${index + 1}`}</span><div className="coin-choice-buttons"><button type="button" aria-pressed={setupCoinChoices[index] === 'kron'} onClick={() => chooseSetupCoinSide(index, 'kron')}>Kron</button><button type="button" aria-pressed={setupCoinChoices[index] === 'mynt'} onClick={() => chooseSetupCoinSide(index, 'mynt')}>Mynt</button></div></div>)}</div>
-              <button className="coin-toss-button" type="button" disabled={!setupCoinChoicesReady} onClick={tossCoin}><span className="coin-mark" aria-hidden="true">50</span>Kast en mynt</button>
-              <p role="status">{coinResult === null ? setupCoinChoicesReady ? 'Alle har valgt. Kast mynten for å se hvem som kaster først.' : 'Velg Kron eller Mynt for hver spiller.' : coinStarterIndex === null ? `${coinResult === 'kron' ? 'Kron' : 'Mynt'} kom opp, men ingen valgte denne siden. Endre valgene og kast igjen.` : `${coinResult === 'kron' ? 'Kron' : 'Mynt'} kom opp. ${names[coinStarterIndex] || `Spiller ${coinStarterIndex + 1}`} kaster først mot bull.`}</p>
+              <div className="coin-guess-list">{names.map((name, index) => <div className="coin-guess-row" key={index}><span>{name || `Spiller ${index + 1}`}</span><div className="coin-choice-buttons"><button type="button" disabled={coinFlipping} aria-pressed={setupCoinChoices[index] === 'kron'} onClick={() => chooseSetupCoinSide(index, 'kron')}>Kron</button><button type="button" disabled={coinFlipping} aria-pressed={setupCoinChoices[index] === 'mynt'} onClick={() => chooseSetupCoinSide(index, 'mynt')}>Mynt</button></div></div>)}</div>
+              <CoinTossButton disabled={!setupCoinChoicesReady} flipping={coinFlipping} landingSide={coinLandingSide} result={coinResult} onClick={tossCoin} />
+              <p role="status">{coinFlipping ? 'Mynten snurrer …' : coinResult === null ? setupCoinChoicesReady ? 'Alle har valgt. Kast mynten for å se hvem som kaster først.' : 'Velg Kron eller Mynt for hver spiller.' : coinStarterIndex === null ? `${coinResult === 'kron' ? 'Kron' : 'Mynt'} kom opp, men ingen valgte denne siden. Endre valgene og kast igjen.` : `${coinResult === 'kron' ? 'Kron' : 'Mynt'} kom opp. ${names[coinStarterIndex] || `Spiller ${coinStarterIndex + 1}`} kaster først mot bull.`}</p>
             </div>}
             <button className="primary-button start-button" type="submit" disabled={playerCount > 1 && coinStarterIndex === null}>{playerCount > 1 ? 'Start bullkast' : 'Start kamp'} <span aria-hidden="true">↗</span></button>
             <p className="form-note">{playerCount > 1 ? 'Myntkastet bestemmer rekkefølgen for bullkastet. ' : ''}Spillernavn lagres automatisk.</p>
@@ -796,7 +844,7 @@ function App() {
             <ul>{savedData.matches.slice(0, 5).map((match) => <li key={match.id}>
               <time dateTime={match.playedAt}>{new Intl.DateTimeFormat('nb-NO', { dateStyle: 'medium' }).format(new Date(match.playedAt))}</time>
               <strong>{match.winnerName} vant</strong>
-              <span>{match.gameMode && match.gameMode !== '501' ? `${match.gameMode === '121' ? '121 utgang' : 'Cricket'} · ` : ''}{match.players.map((player) => player.legsWon === undefined ? `${player.name}: ${player.score} poeng` : `${player.name}: ${player.legsWon} ${player.legsWon === 1 ? 'legg' : 'legger'}`).join(' · ')}{match.bestOfLegs ? ` · Best av ${match.bestOfLegs}` : ''}</span>
+              <span>{match.gameMode && match.gameMode !== '501' ? `${match.gameMode === '121' ? '121 utgang' : 'Cricket'} · ` : ''}{match.players.map((player) => player.legsWon === undefined ? `${player.name}: ${player.score} poeng` : `${player.name}: ${player.legsWon} ${match.gameMode === '121' ? player.legsWon === 1 ? 'runde' : 'runder' : player.legsWon === 1 ? 'legg' : 'legger'}`).join(' · ')}{match.bestOfLegs ? ` · Best av ${match.bestOfLegs}` : ''}</span>
               {match.finishMethod && <button className="reopen-match-button" type="button" onClick={() => reopenSavedMatch(match)}>Åpne kampen igjen</button>}
             </li>)}</ul>
           </section>}
@@ -828,19 +876,19 @@ function App() {
           </div>
           <div className="bull-off-panel">
             <div className="panel-heading"><div><p className="eyebrow">KASTEREKKEFØLGE</p><h2>Hvem kom nærmest bull?</h2></div><span className="panel-index">BULL / 42</span></div>
-            <div className="coin-guess-list bull-guess-list">{players.map((player) => <div className="coin-guess-row" key={player.id}><span>{player.name}</span><div className="coin-choice-buttons"><button type="button" aria-pressed={bullCoinChoices[player.id] === 'kron'} onClick={() => chooseBullCoinSide(player.id, 'kron')}>Kron</button><button type="button" aria-pressed={bullCoinChoices[player.id] === 'mynt'} onClick={() => chooseBullCoinSide(player.id, 'mynt')}>Mynt</button></div></div>)}</div>
-            <button className="coin-toss-button bull-toss-action" type="button" disabled={!bullCoinChoicesReady} onClick={tossCoin}><span className="coin-mark" aria-hidden="true">50</span>Kast en mynt</button>
-            <p className="bull-toss-note" role="status">{coinResult === null ? bullCoinChoicesReady ? 'Alle har valgt. Kast mynten for å se hvem som kaster først.' : 'Velg Kron eller Mynt for hver spiller.' : coinStarterIndex === null ? `${coinResult === 'kron' ? 'Kron' : 'Mynt'} kom opp, men ingen valgte denne siden. Endre valgene og kast igjen.` : `${coinResult === 'kron' ? 'Kron' : 'Mynt'} kom opp. ${bullThrowOrder[0]?.name} kaster først.`}</p>
+            <div className="coin-guess-list bull-guess-list">{players.map((player) => <div className="coin-guess-row" key={player.id}><span>{player.name}</span><div className="coin-choice-buttons"><button type="button" disabled={coinFlipping} aria-pressed={bullCoinChoices[player.id] === 'kron'} onClick={() => chooseBullCoinSide(player.id, 'kron')}>Kron</button><button type="button" disabled={coinFlipping} aria-pressed={bullCoinChoices[player.id] === 'mynt'} onClick={() => chooseBullCoinSide(player.id, 'mynt')}>Mynt</button></div></div>)}</div>
+            <CoinTossButton disabled={!bullCoinChoicesReady} flipping={coinFlipping} landingSide={coinLandingSide} result={coinResult} onClick={tossCoin} />
+            <p className="bull-toss-note" role="status">{coinFlipping ? 'Mynten snurrer …' : coinResult === null ? bullCoinChoicesReady ? 'Alle har valgt. Kast mynten for å se hvem som kaster først.' : 'Velg Kron eller Mynt for hver spiller.' : coinStarterIndex === null ? `${coinResult === 'kron' ? 'Kron' : 'Mynt'} kom opp, men ingen valgte denne siden. Endre valgene og kast igjen.` : `${coinResult === 'kron' ? 'Kron' : 'Mynt'} kom opp. ${bullThrowOrder[0]?.name} kaster først.`}</p>
             {coinStarterIndex !== null && <ol className="bull-order">{bullThrowOrder.map((player, index) => <li key={player.id}><span className="bull-order-number">{String(index + 1).padStart(2, '0')}</span><strong>{player.name}</strong>{index === 0 && <span className="bull-first-tag">KASTER FØRST</span>}</li>)}</ol>}
             <label className="bull-winner-field"><span>HVEM KOM NÆRMEST BULL?</span><select required value={bullWinnerId} onChange={(event) => setBullWinnerId(event.target.value)}><option value="" disabled>Velg spiller</option>{players.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select></label>
             <button className="primary-button start-button" type="button" disabled={!bullWinnerId || coinStarterIndex === null} onClick={finishLegBullOff}>Avgjør leggen <span aria-hidden="true">↗</span></button>
-            <button className="text-button bull-back-button" type="button" onClick={() => { setBullWinnerId(''); setCoinStarterIndex(null); setCoinResult(null); setBullCoinChoices({}); setGamePhase('playing') }}>Fortsett å spille 501</button>
+            <button className="text-button bull-back-button" type="button" onClick={() => { cancelCoinFlip(); setBullWinnerId(''); setCoinStarterIndex(null); setCoinResult(null); setBullCoinChoices({}); setGamePhase('playing') }}>Fortsett å spille 501</button>
           </div>
         </section>
       ) : (
         <section className="game-layout">
           <div className="game-heading">
-            <div><p className="eyebrow">{matchWinnerId ? <>KAMPEN ER AVGJORT <span className="heading-slash">/</span> BEST AV {bestOfLegs}</> : <>KAMPROM / 01 <span className="heading-slash">/</span> LEGG {String(legNumber).padStart(2, '0')} <span className="heading-slash">/</span> BEST AV {bestOfLegs}</>}</p><h1>{gameMode === 'cricket' ? 'Cricket' : gameMode}<span className="title-period">.</span></h1></div>
+            <div><p className="eyebrow">{matchWinnerId ? <>KAMPEN ER AVGJORT <span className="heading-slash">/</span> BEST AV {bestOfLegs}</> : <>KAMPROM / 01 <span className="heading-slash">/</span> {roundWord} {String(legNumber).padStart(2, '0')} <span className="heading-slash">/</span> BEST AV {bestOfLegs}</>}</p><h1>{gameMode === 'cricket' ? 'Cricket' : gameMode}<span className="title-period">.</span></h1></div>
             <div className="game-actions">
               <button className="text-button" type="button" disabled={!history.length || matchWinnerId !== null} onClick={undoVisit}><span aria-hidden="true">↶</span> Angre</button>
               <button className="text-button new-game-button" type="button" onClick={newGame}>Ny kamp <span aria-hidden="true">↗</span></button>
@@ -856,21 +904,21 @@ function App() {
               const stats = summarizePlayer(player, legsWon[player.id] ?? 0)
               return (
                 <article className={`player-card${isActive ? ' is-active' : ''}${player.id === winnerId ? ' is-winner' : ''}`} key={player.id}>
-                  <div className="player-card-top"><div className="player-name-wrap"><span className="player-number">{String(index + 1).padStart(2, '0')}</span><h2>{player.name}</h2></div>{isActive && <span className="turn-tag"><span className="live-dot" /> DIN TUR</span>}{player.id === winnerId && <span className="winner-tag">LEGGVINNER</span>}</div>
+                  <div className="player-card-top"><div className="player-name-wrap"><span className="player-number">{String(index + 1).padStart(2, '0')}</span><h2>{player.name}</h2></div>{isActive && <span className="turn-tag"><span className="live-dot" /> DIN TUR</span>}{player.id === winnerId && <span className="winner-tag">{roundWord}VINNER</span>}</div>
                   {gameMode === 'cricket' ? <div className="score-display cricket-score" aria-label={`${player.score} poeng`}>{player.score}<span>POENG</span></div> : <button className="score-display score-edit-button" type="button" disabled={winnerId !== null} aria-label={`Rett poengsummen til ${player.score} for ${player.name}`} onClick={() => editPlayerScore(player)}>{player.score}<span className="score-edit-cue">{player.scoreCorrected ? 'POENGSUM RETTET' : 'TRYKK PÅ POENGSUMMEN FOR Å RETTE'}</span></button>}
                   {gameMode === 'cricket' && <div className="cricket-mark-board" aria-label={`Cricket-felt for ${player.name}`}>{CRICKET_TARGETS.map((target) => {
                     const marks = player.cricketMarks?.[target] ?? 0
                     return <div className="cricket-mark" key={target} aria-label={`${target === 25 ? 'Bull' : target}: ${marks} av 3 treff`}><strong>{target === 25 ? 'BULL' : target}</strong><span>{[0, 1, 2].map((mark) => <i key={mark} className={mark < marks ? 'marked' : ''} />)}</span></div>
                   })}</div>}
-                  <div className="legs-progress" aria-label={`${legsWon[player.id] ?? 0} av ${legsToWin} legg`}><div>{Array.from({ length: legsToWin }, (_, legIndex) => <span key={legIndex} className={legIndex < (legsWon[player.id] ?? 0) ? 'leg-pip earned' : 'leg-pip'} />)}</div><span>{legsWon[player.id] ?? 0} / {legsToWin} LEGG</span></div>
+                  <div className="legs-progress" aria-label={`${legsWon[player.id] ?? 0} av ${legsToWin} ${roundWordPlural}`}><div>{Array.from({ length: legsToWin }, (_, legIndex) => <span key={legIndex} className={legIndex < (legsWon[player.id] ?? 0) ? 'leg-pip earned' : 'leg-pip'} />)}</div><span>{legsWon[player.id] ?? 0} / {legsToWin} {roundWordPlural.toUpperCase()}</span></div>
                   {gameMode !== 'cricket' && <div className="player-stats" aria-label={`3-pilssnitt ${stats.average3.toFixed(1)}, ${stats.tons} 100-plussrunder, ${stats.oneEighties} 180-ere`}><div><strong>{stats.average3.toFixed(1)}</strong><span>3-PILSSNITT</span></div><div><strong>{stats.tons}</strong><span>100+</span></div><div><strong>{stats.oneEighties}</strong><span>180</span></div><div><strong>{stats.highestVisit}</strong><span>HØYESTE</span></div></div>}
-                  <div className="player-card-bottom"><span>{legVisits.length} {legVisits.length === 1 ? 'TUR' : 'TURER'} I LEGG</span>{player.scoreCorrected ? <span className="last-visit">POENGSUM RETTET</span> : lastVisit && <span className={lastVisit.bust ? 'last-visit bust-label' : 'last-visit'}>{lastVisit.bust ? 'SISTE TUR: BUST' : lastVisit.checkout ? 'UTGANG' : `SISTE TUR: ${lastVisit.total}`}</span>}</div>
+                  <div className="player-card-bottom"><span>{legVisits.length} {legVisits.length === 1 ? 'TUR' : 'TURER'} I {roundWord}</span>{player.scoreCorrected ? <span className="last-visit">POENGSUM RETTET</span> : lastVisit && <span className={lastVisit.bust ? 'last-visit bust-label' : 'last-visit'}>{lastVisit.bust ? 'SISTE TUR: BUST' : lastVisit.checkout ? 'UTGANG' : `SISTE TUR: ${lastVisit.total}`}</span>}</div>
                 </article>
               )
             })}
           </div>
           {winner ? (
-            <div className="winner-banner" role="status"><div><p className="eyebrow">{matchWinnerId ? 'KAMPEN ER AVGJORT' : `LEGG ${legNumber - 1} ER FERDIG`}</p><h2>{matchWinnerId ? `${winner.name} vant kampen.` : `${winner.name} vant leggen.`}</h2><p className="match-scoreline">{players.map((player) => `${player.name} ${legsWon[player.id] ?? 0}`).join('  ·  ')} <span>BEST AV {bestOfLegs}</span></p>{matchWinnerId && emailReportMessage && <p className="email-report-status" role="status">{emailReportMessage}</p>}</div><button className="primary-button" type="button" onClick={matchWinnerId ? newGame : startNextLeg}>{matchWinnerId ? 'Ny kamp' : 'Neste legg'} <span aria-hidden="true">↗</span></button></div>
+            <div className="winner-banner" role="status"><div><p className="eyebrow">{matchWinnerId ? 'KAMPEN ER AVGJORT' : `${roundWord} ${legNumber - 1} ER FERDIG`}</p><h2>{matchWinnerId ? `${winner.name} vant kampen.` : `${winner.name} vant ${roundWordLower}en.`}</h2><p className="match-scoreline">{players.map((player) => `${player.name} ${legsWon[player.id] ?? 0}`).join('  ·  ')} <span>BEST AV {bestOfLegs}</span></p>{matchWinnerId && emailReportMessage && <p className="email-report-status" role="status">{emailReportMessage}</p>}</div><button className="primary-button" type="button" onClick={matchWinnerId ? newGame : startNextLeg}>{matchWinnerId ? 'Ny kamp' : `Neste ${roundWordLower}`} <span aria-hidden="true">↗</span></button></div>
           ) : (
             <form className="score-entry" onSubmit={recordVisit}>
               <div className="entry-title"><div><p className="eyebrow">{gameMode === 'cricket' ? 'REGISTRER TREFF' : 'REGISTRER POENG'}</p><h2>{currentPlayer?.name}<span> sin tur</span></h2></div><span className="dart-counter">{entryMode === 'total' && gameMode !== 'cricket' ? 'TOTALSUM' : '3 KAST'}</span></div>
