@@ -5,6 +5,7 @@ export type VisitForStats = {
   bust: boolean
   checkout: boolean
   darts: [number, number, number] | null
+  cricketDarts?: { target: number | null; marks: number }[]
 }
 
 export type PlayerMatchStats = {

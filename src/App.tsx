@@ -6,11 +6,14 @@ import type { SavedData } from './database'
 import { supabase } from './supabase'
 import type { Session } from '@supabase/supabase-js'
 import { summarizePlayer } from './stats'
+import { applyCricketVisit, CRICKET_TARGETS, hasWonCricket } from './cricket'
+import type { CricketDart, CricketMarks } from './cricket'
 
 type DartInputs = [string, string, string]
-type ScoredDart = { points: number; isDouble: boolean }
-type Visit = { darts: [number, number, number] | null; total: number; bust: boolean; checkout: boolean; dartsThrown: number; legNumber: number }
-type Player = { id: string; name: string; score: number; visits: Visit[]; scoreCorrected?: boolean }
+type ScoredDart = { points: number; isDouble: boolean; target: number | null; marks: number }
+type GameMode = '501' | 'cricket' | '121'
+type Visit = { darts: [number, number, number] | null; total: number; bust: boolean; checkout: boolean; dartsThrown: number; legNumber: number; cricketDarts?: CricketDart[] }
+type Player = { id: string; name: string; score: number; visits: Visit[]; cricketMarks?: CricketMarks; scoreCorrected?: boolean }
 type Snapshot = { players: Player[]; activePlayer: number; winnerId: string | null; legsWon: Record<string, number>; matchWinnerId: string | null }
 type EntryMode = 'darts' | 'total'
 type GamePhase = 'setup' | 'bull-off' | 'leg-bull-off' | 'playing'
@@ -36,6 +39,11 @@ const DART_OPTION_GROUPS = [
   })) },
 ]
 
+const CRICKET_DART_OPTION_GROUPS = DART_OPTION_GROUPS.map((group) => ({
+  ...group,
+  options: group.options.filter((option) => option.value === 'MISS' || option.value === 'SB' || option.value === 'BULL' || /^[SDT](1[5-9]|20)$/.test(option.value)),
+})).filter((group) => group.options.length > 0)
+
 const QUICK_VISITS: Record<number, DartInputs> = {
   60: ['T20', 'MISS', 'MISS'],
   100: ['T20', 'D20', 'MISS'],
@@ -45,27 +53,40 @@ const QUICK_VISITS: Record<number, DartInputs> = {
 
 function parseDartNotation(value: string): ScoredDart | null {
   const notation = value.trim().toUpperCase().replace(/\s/g, '')
-  if (notation === 'MISS' || notation === '0') return { points: 0, isDouble: false }
-  if (notation === 'SB' || notation === '25') return { points: 25, isDouble: false }
-  if (notation === 'BULL' || notation === 'DBULL') return { points: 50, isDouble: true }
+  if (notation === 'MISS' || notation === '0') return { points: 0, isDouble: false, target: null, marks: 0 }
+  if (notation === 'SB' || notation === '25') return { points: 25, isDouble: false, target: 25, marks: 1 }
+  if (notation === 'BULL' || notation === 'DBULL') return { points: 50, isDouble: true, target: 25, marks: 2 }
 
   const segmentMatch = notation.match(/^([SDT])(20|1[0-9]|[1-9])$/)
   if (segmentMatch) {
     const [, segment, targetValue] = segmentMatch
     const target = Number(targetValue)
     const multiplier = segment === 'T' ? 3 : segment === 'D' ? 2 : 1
-    return { points: target * multiplier, isDouble: segment === 'D' }
+    return { points: target * multiplier, isDouble: segment === 'D', target, marks: multiplier }
   }
 
   if (/^\d+$/.test(notation)) {
     const points = Number(notation)
-    if (points <= 60) return { points, isDouble: false }
+    if (points <= 60) return { points, isDouble: false, target: null, marks: 0 }
   }
   return null
 }
 
+function countCricketMarks(visits: Visit[]): CricketMarks {
+  const marks: CricketMarks = Object.fromEntries(CRICKET_TARGETS.map((target) => [target, 0]))
+  for (const visit of visits) {
+    for (const dart of visit.cricketDarts ?? []) {
+      if (dart.target !== null && marks[dart.target] !== undefined) {
+        marks[dart.target] = Math.min(3, marks[dart.target] + dart.marks)
+      }
+    }
+  }
+  return marks
+}
+
 function App() {
   const [playerCount, setPlayerCount] = useState(2)
+  const [gameMode, setGameMode] = useState<GameMode>('501')
   const [bestOfLegs, setBestOfLegs] = useState<3 | 5 | 7>(3)
   const [playerNames, setPlayerNames] = useState<string[]>(['', ''])
   const [newRosterName, setNewRosterName] = useState('')
@@ -190,7 +211,7 @@ function App() {
   const scoreEditPlayer = players.find((player) => player.id === scoreEditPlayerId)
   const legsToWin = Math.ceil(bestOfLegs / 2)
   const legNumber = Object.values(legsWon).reduce((total, count) => total + count, 0) + 1
-  const checkoutHint = currentPlayer ? getCheckoutHint(currentPlayer.score) : null
+  const checkoutHint = currentPlayer && gameMode !== 'cricket' ? getCheckoutHint(currentPlayer.score) : null
   const names = Array.from({ length: playerCount }, (_, index) => playerNames[index] ?? '')
   const setupCoinChoicesReady = names.every((_, index) => setupCoinChoices[index] !== undefined)
   const bullCoinChoicesReady = players.length > 0 && players.every((player) => bullCoinChoices[player.id] !== undefined)
@@ -198,14 +219,27 @@ function App() {
     ? players.map((_, offset) => players[(coinStarterIndex + offset) % players.length])
     : players
 
+  function selectGameMode(mode: GameMode) {
+    setGameMode(mode)
+    if (mode === 'cricket' && playerCount === 1) {
+      setPlayerCount(2)
+      setRosterSlot(0)
+    }
+    setEntryMode('darts')
+    setSetupCoinChoices({})
+    setCoinResult(null)
+    setCoinStarterIndex(null)
+  }
+
   function beginGame(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (playerCount > 1 && (coinResult === null || coinStarterIndex === null)) return
     const roster = names.map((name, index) => ({
       id: `${Date.now()}-${index}`,
       name: name.trim() || `Spiller ${index + 1}`,
-      score: 501,
+      score: gameMode === '121' ? 121 : 0,
       visits: [],
+      ...(gameMode === 'cricket' ? { cricketMarks: Object.fromEntries(CRICKET_TARGETS.map((target) => [target, 0])) } : {}),
     }))
     setPlayers(roster)
     setBullCoinChoices(Object.fromEntries(roster.map((player, index) => [player.id, setupCoinChoices[index]])))
@@ -330,7 +364,7 @@ function App() {
     void supabase.auth.signOut().catch(() => setDatabaseMessage('Kunne ikke logge ut. Prøv igjen.'))
   }
 
-  function start501() {
+  function startGame() {
     const startingPlayer = players.findIndex((player) => player.id === bullWinnerId)
     if (startingPlayer < 0 || coinStarterIndex === null) return
     setActivePlayer(startingPlayer)
@@ -353,6 +387,7 @@ function App() {
         id: reopenedMatchId ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         playedAt: new Date().toISOString(),
         winnerName: legWinner.name,
+        gameMode,
         bestOfLegs,
         finishMethod,
         legStarterName: players[legStarterIndex]?.name,
@@ -399,8 +434,13 @@ function App() {
     let total: number
     let lastDartIsDouble: boolean
     let dartsThrown: number
+    let cricketDarts: CricketDart[] | null = null
 
     if (entryMode === 'total') {
+      if (gameMode === 'cricket') {
+        setMessage('Velg kast for hver pil for å registrere Cricket-treff.')
+        return
+      }
       const parsedTotal = Number(manualTotal)
       if (manualTotal.trim() === '' || !Number.isInteger(parsedTotal) || parsedTotal < 0 || parsedTotal > 180) {
         setMessage('Skriv inn en totalsum fra 0 til 180.')
@@ -421,6 +461,32 @@ function App() {
       total = scores.reduce((sum, score) => sum + score, 0)
       lastDartIsDouble = validDarts[2].isDouble
       dartsThrown = 3
+      cricketDarts = validDarts.map(({ target, marks }) => ({ target, marks }))
+    }
+
+    if (gameMode === 'cricket' && cricketDarts) {
+      const opponents = players.filter((player) => player.id !== currentPlayer.id)
+      const result = applyCricketVisit(
+        currentPlayer.cricketMarks ?? {},
+        opponents.map((player) => player.cricketMarks ?? {}),
+        currentPlayer.score,
+        cricketDarts,
+      )
+      const cricketWinner = hasWonCricket(result.marks, result.score, opponents.map((player) => player.score))
+      const visitPoints = result.score - currentPlayer.score
+      const nextPlayers = players.map((player) => player.id === currentPlayer.id
+        ? { ...player, score: result.score, cricketMarks: result.marks, visits: [...player.visits, { darts: scores, total: visitPoints, bust: false, checkout: cricketWinner, dartsThrown, legNumber, cricketDarts }] }
+        : player)
+
+      setHistory((items) => [...items, { players, activePlayer, winnerId, legsWon, matchWinnerId }])
+      setPlayers(nextPlayers)
+      setActivePlayer((activePlayer + 1) % players.length)
+      if (cricketWinner) finishLeg(currentPlayer.id, nextPlayers, 'checkout')
+      else setWinnerId(null)
+      setDarts(['', '', ''])
+      setManualTotal('')
+      setMessage(cricketWinner ? 'Alle feltene er lukket. Kampen er avgjort.' : `${visitPoints > 0 ? `${visitPoints} poeng lagt til.` : 'Treffene er registrert.'}`)
+      return
     }
 
     const remaining = currentPlayer.score - total
@@ -483,7 +549,12 @@ function App() {
   function startNextLeg() {
     if (!winnerId || matchWinnerId) return
     const nextStarter = (legStarterIndex + 1) % players.length
-    setPlayers(players.map((player) => ({ ...player, score: 501, scoreCorrected: false })))
+    setPlayers(players.map((player) => ({
+      ...player,
+      score: gameMode === '121' ? 121 : 0,
+      ...(gameMode === 'cricket' ? { cricketMarks: Object.fromEntries(CRICKET_TARGETS.map((target) => [target, 0])) } : {}),
+      scoreCorrected: false,
+    })))
     setWinnerId(null)
     setActivePlayer(nextStarter)
     setLegStarterIndex(nextStarter)
@@ -502,11 +573,13 @@ function App() {
 
   function reopenSavedMatch(match: SavedData['matches'][number]) {
     if (!match.finishMethod || match.players.length === 0) return
+    const isCricket = match.gameMode === 'cricket'
     const reopenedPlayers = match.players.map((savedPlayer) => ({
       id: savedPlayer.name.trim().toLowerCase(),
       name: savedPlayer.name,
       score: savedPlayer.score,
       visits: savedPlayer.visits.map((visit) => ({ ...visit })),
+      ...(isCricket ? { cricketMarks: countCricketMarks(savedPlayer.visits) } : {}),
       scoreCorrected: false,
     }))
     const matchWinnerIndex = reopenedPlayers.findIndex((player) => player.name === match.winnerName)
@@ -517,7 +590,12 @@ function App() {
       const finalVisit = reopenedPlayers[matchWinnerIndex].visits.at(-1)
       if (!finalVisit?.checkout) return
       restoredPlayers = reopenedPlayers.map((player, index) => index === matchWinnerIndex
-        ? { ...player, score: finalVisit.total, visits: player.visits.slice(0, -1) }
+        ? {
+          ...player,
+          score: isCricket ? Math.max(0, player.score - finalVisit.total) : finalVisit.total,
+          visits: player.visits.slice(0, -1),
+          ...(isCricket ? { cricketMarks: countCricketMarks(player.visits.slice(0, -1)) } : {}),
+        }
         : player)
     }
 
@@ -532,6 +610,7 @@ function App() {
     const starterIndex = savedStarterIndex >= 0 ? savedStarterIndex : matchWinnerIndex
 
     setPlayerCount(restoredPlayers.length)
+    setGameMode(match.gameMode ?? '501')
     setPlayerNames(restoredPlayers.map((player) => player.name))
     setPlayers(restoredPlayers)
     setLegsWon(restoredLegs)
@@ -573,8 +652,9 @@ function App() {
     event.preventDefault()
     const player = players.find((item) => item.id === scoreEditPlayerId)
     const correctedScore = Number(scoreEditInput)
-    if (!player || !Number.isInteger(correctedScore) || correctedScore < 0 || correctedScore > 501) {
-      setScoreEditError('Skriv inn en gyldig poengsum fra 0 til 501.')
+    const maximumScore = gameMode === '121' ? 121 : 501
+    if (!player || gameMode === 'cricket' || !Number.isInteger(correctedScore) || correctedScore < 0 || correctedScore > maximumScore) {
+      setScoreEditError(`Skriv inn en gyldig poengsum fra 0 til ${maximumScore}.`)
       return
     }
     if (correctedScore === 1) {
@@ -654,7 +734,7 @@ function App() {
           <img className="brand-logo" src="/logo.png" alt="" />
           <span>STEINKJER <span className="brand-dot">DART-X</span></span>
         </a>
-        <div className="topbar-meta">{isOnline ? <span className="live-dot" /> : <span className="offline-dot" />} {isOnline ? '501 / DOBBEL UT' : 'OFFLINE'} {session && <button className="sign-out-button" type="button" onClick={signOut}>Logg ut</button>}{!supabase && <span className="local-mode-tag">LOKAL MODUS</span>}</div>
+        <div className="topbar-meta">{isOnline ? <span className="live-dot" /> : <span className="offline-dot" />} {isOnline ? gameMode === 'cricket' ? 'CRICKET' : `${gameMode} / DOBBEL UT` : 'OFFLINE'} {session && <button className="sign-out-button" type="button" onClick={signOut}>Logg ut</button>}{!supabase && <span className="local-mode-tag">LOKAL MODUS</span>}</div>
       </header>
       {databaseMessage && <p className="database-message" role="status">{databaseMessage}</p>}
 
@@ -662,15 +742,20 @@ function App() {
         <section className="setup-layout">
           <div className="setup-copy">
             <p className="eyebrow">KAMPROM / 01</p>
-            <h1>501<span className="title-period">.</span></h1>
-            <p className="intro">Følg poengene. Se hvem som leder.</p>
-            <div className="rules-line"><span>501</span><i /> DOBBEL UT <i /> FØRST TIL NULL</div>
+            <h1>{gameMode === 'cricket' ? 'Cricket' : gameMode}<span className="title-period">.</span></h1>
+            <p className="intro">{gameMode === 'cricket' ? 'Lukk feltene fra 15 til 20 og bull før motstanderen.' : gameMode === '121' ? 'Start på 121. Førstemann til dobbel ut vinner leggen.' : 'Følg poengene. Se hvem som leder.'}</p>
+            <div className="rules-line"><span>{gameMode === 'cricket' ? '15–20 + BULL' : gameMode}</span><i /> {gameMode === 'cricket' ? 'TRE TREFF LUKKER' : 'DOBBEL UT'} <i /> {gameMode === 'cricket' ? 'FLERE POENG VINNER' : 'FØRST TIL NULL'}</div>
           </div>
           <form className="setup-panel" onSubmit={beginGame}>
             <div className="panel-heading"><div><p className="eyebrow">NY KAMP</p><h2>Hvem spiller?</h2></div><span className="panel-index">01 — 02</span></div>
             <fieldset className="player-count">
               <legend>ANTALL SPILLERE</legend>
-              <div className="count-options">{[1, 2, 3, 4].map((count) => <button key={count} type="button" aria-pressed={playerCount === count} className={playerCount === count ? 'count-option selected' : 'count-option'} onClick={() => { setPlayerCount(count); setRosterSlot((slot) => Math.min(slot, count - 1)); setSetupCoinChoices({}); setCoinResult(null); setCoinStarterIndex(null) }}>{count}</button>)}</div>
+              <div className="count-options">{[1, 2, 3, 4].filter((count) => gameMode !== 'cricket' || count > 1).map((count) => <button key={count} type="button" aria-pressed={playerCount === count} className={playerCount === count ? 'count-option selected' : 'count-option'} onClick={() => { setPlayerCount(count); setRosterSlot((slot) => Math.min(slot, count - 1)); setSetupCoinChoices({}); setCoinResult(null); setCoinStarterIndex(null) }}>{count}</button>)}</div>
+            </fieldset>
+            <fieldset className="match-format game-mode-format">
+              <legend>SPILLTYPE</legend>
+              <div className="game-mode-options">{([{ id: '501', label: '501' }, { id: 'cricket', label: 'Cricket' }, { id: '121', label: '121 utgang' }] as const).map((mode) => <button key={mode.id} type="button" aria-pressed={gameMode === mode.id} className={gameMode === mode.id ? 'format-option selected' : 'format-option'} onClick={() => selectGameMode(mode.id)}>{mode.label}</button>)}</div>
+              <p>{gameMode === 'cricket' ? 'Tre treff lukker 15–20 og bull. Treff på lukkede felt gir poeng så lenge motstanderen har feltet åpent.' : gameMode === '121' ? 'Hver legg starter på 121 og følger vanlig dobbelt-ut-regel.' : 'Først til valgt antall legger vinner kampen.'}</p>
             </fieldset>
             <fieldset className="match-format">
               <legend>KAMPFORMAT</legend>
@@ -704,14 +789,14 @@ function App() {
               <p role="status">{coinResult === null ? setupCoinChoicesReady ? 'Alle har valgt. Kast mynten for å se hvem som kaster først.' : 'Velg Kron eller Mynt for hver spiller.' : coinStarterIndex === null ? `${coinResult === 'kron' ? 'Kron' : 'Mynt'} kom opp, men ingen valgte denne siden. Endre valgene og kast igjen.` : `${coinResult === 'kron' ? 'Kron' : 'Mynt'} kom opp. ${names[coinStarterIndex] || `Spiller ${coinStarterIndex + 1}`} kaster først mot bull.`}</p>
             </div>}
             <button className="primary-button start-button" type="submit" disabled={playerCount > 1 && coinStarterIndex === null}>{playerCount > 1 ? 'Start bullkast' : 'Start kamp'} <span aria-hidden="true">↗</span></button>
-            <p className="form-note">Spilleren som kommer nærmest bull, starter på 501. Spillernavn lagres automatisk.</p>
+            <p className="form-note">{playerCount > 1 ? 'Myntkastet bestemmer rekkefølgen for bullkastet. ' : ''}Spillernavn lagres automatisk.</p>
           </form>
           {savedData.matches.length > 0 && <section className="saved-history" aria-label="Tidligere kamper">
             <div className="saved-history-heading"><div><p className="eyebrow">LOKALT LAGRET</p><h2>Siste kamper</h2></div><span>{savedData.matches.length} KAMPER</span></div>
             <ul>{savedData.matches.slice(0, 5).map((match) => <li key={match.id}>
               <time dateTime={match.playedAt}>{new Intl.DateTimeFormat('nb-NO', { dateStyle: 'medium' }).format(new Date(match.playedAt))}</time>
               <strong>{match.winnerName} vant</strong>
-              <span>{match.players.map((player) => player.legsWon === undefined ? `${player.name}: ${player.score} poeng` : `${player.name}: ${player.legsWon} ${player.legsWon === 1 ? 'legg' : 'legger'}`).join(' · ')}{match.bestOfLegs ? ` · Best av ${match.bestOfLegs}` : ''}</span>
+              <span>{match.gameMode && match.gameMode !== '501' ? `${match.gameMode === '121' ? '121 utgang' : 'Cricket'} · ` : ''}{match.players.map((player) => player.legsWon === undefined ? `${player.name}: ${player.score} poeng` : `${player.name}: ${player.legsWon} ${player.legsWon === 1 ? 'legg' : 'legger'}`).join(' · ')}{match.bestOfLegs ? ` · Best av ${match.bestOfLegs}` : ''}</span>
               {match.finishMethod && <button className="reopen-match-button" type="button" onClick={() => reopenSavedMatch(match)}>Åpne kampen igjen</button>}
             </li>)}</ul>
           </section>}
@@ -722,14 +807,14 @@ function App() {
           <div className="bull-off-copy">
             <p className="eyebrow">FØR KAMP / BULLKAST</p>
             <h1>BULL<span className="title-period">.</span></h1>
-            <p className="intro">Kast mot midten. Spilleren som kommer nærmest bull, starter på 501.</p>
+            <p className="intro">Kast mot midten. Spilleren som kommer nærmest bull, starter {gameMode === 'cricket' ? 'kampen' : `på ${gameMode}`}.</p>
             <div className="rules-line"><span>MYNTKAST</span><i /> BESTEMMER KASTEREKKEFØLGEN</div>
           </div>
           <div className="bull-off-panel">
             <div className="panel-heading"><div><p className="eyebrow">KASTEREKKEFØLGE</p><h2>Hvem kom nærmest bull?</h2></div><span className="panel-index">BULL / 01</span></div>
             <ol className="bull-order">{bullThrowOrder.map((player, index) => <li key={player.id}><span className="bull-order-number">{String(index + 1).padStart(2, '0')}</span><strong>{player.name}</strong>{index === 0 && <span className="bull-first-tag">KASTER FØRST</span>}</li>)}</ol>
             <label className="bull-winner-field"><span>HVEM KOM NÆRMEST BULL?</span><select required value={bullWinnerId} onChange={(event) => setBullWinnerId(event.target.value)}><option value="" disabled>Velg spiller</option>{players.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select></label>
-            <button className="primary-button start-button" type="button" disabled={!bullWinnerId} onClick={start501}>Start 501 <span aria-hidden="true">↗</span></button>
+            <button className="primary-button start-button" type="button" disabled={!bullWinnerId} onClick={startGame}>Start {gameMode === 'cricket' ? 'Cricket' : gameMode} <span aria-hidden="true">↗</span></button>
             <button className="text-button bull-back-button" type="button" onClick={newGame}>Tilbake til oppsett</button>
           </div>
         </section>
@@ -755,13 +840,13 @@ function App() {
       ) : (
         <section className="game-layout">
           <div className="game-heading">
-            <div><p className="eyebrow">{matchWinnerId ? <>KAMPEN ER AVGJORT <span className="heading-slash">/</span> BEST AV {bestOfLegs}</> : <>KAMPROM / 01 <span className="heading-slash">/</span> LEGG {String(legNumber).padStart(2, '0')} <span className="heading-slash">/</span> BEST AV {bestOfLegs}</>}</p><h1>501<span className="title-period">.</span></h1></div>
+            <div><p className="eyebrow">{matchWinnerId ? <>KAMPEN ER AVGJORT <span className="heading-slash">/</span> BEST AV {bestOfLegs}</> : <>KAMPROM / 01 <span className="heading-slash">/</span> LEGG {String(legNumber).padStart(2, '0')} <span className="heading-slash">/</span> BEST AV {bestOfLegs}</>}</p><h1>{gameMode === 'cricket' ? 'Cricket' : gameMode}<span className="title-period">.</span></h1></div>
             <div className="game-actions">
               <button className="text-button" type="button" disabled={!history.length || matchWinnerId !== null} onClick={undoVisit}><span aria-hidden="true">↶</span> Angre</button>
               <button className="text-button new-game-button" type="button" onClick={newGame}>Ny kamp <span aria-hidden="true">↗</span></button>
             </div>
           </div>
-          {!winnerId && players.length > 1 && players.some((player) => player.score === 42) && <div className="bull-trigger" role="status"><div><span>42 IGJEN</span><strong>Vil dere avgjøre leggen med et kast på bull?</strong></div><button className="bull-trigger-button" type="button" onClick={beginLegBullOff}>Avgjør på bull</button></div>}
+          {gameMode === '501' && !winnerId && players.length > 1 && players.some((player) => player.score === 42) && <div className="bull-trigger" role="status"><div><span>42 IGJEN</span><strong>Vil dere avgjøre leggen med et kast på bull?</strong></div><button className="bull-trigger-button" type="button" onClick={beginLegBullOff}>Avgjør på bull</button></div>}
           <div className={`player-grid players-${players.length}`}>
             {players.map((player, index) => {
               const isActive = index === activePlayer && !winnerId
@@ -772,9 +857,13 @@ function App() {
               return (
                 <article className={`player-card${isActive ? ' is-active' : ''}${player.id === winnerId ? ' is-winner' : ''}`} key={player.id}>
                   <div className="player-card-top"><div className="player-name-wrap"><span className="player-number">{String(index + 1).padStart(2, '0')}</span><h2>{player.name}</h2></div>{isActive && <span className="turn-tag"><span className="live-dot" /> DIN TUR</span>}{player.id === winnerId && <span className="winner-tag">LEGGVINNER</span>}</div>
-                  <button className="score-display score-edit-button" type="button" disabled={winnerId !== null} aria-label={`Rett poengsummen til ${player.score} for ${player.name}`} onClick={() => editPlayerScore(player)}>{player.score}<span className="score-edit-cue">{player.scoreCorrected ? 'POENGSUM RETTET' : 'TRYKK PÅ POENGSUMMEN FOR Å RETTE'}</span></button>
+                  {gameMode === 'cricket' ? <div className="score-display cricket-score" aria-label={`${player.score} poeng`}>{player.score}<span>POENG</span></div> : <button className="score-display score-edit-button" type="button" disabled={winnerId !== null} aria-label={`Rett poengsummen til ${player.score} for ${player.name}`} onClick={() => editPlayerScore(player)}>{player.score}<span className="score-edit-cue">{player.scoreCorrected ? 'POENGSUM RETTET' : 'TRYKK PÅ POENGSUMMEN FOR Å RETTE'}</span></button>}
+                  {gameMode === 'cricket' && <div className="cricket-mark-board" aria-label={`Cricket-felt for ${player.name}`}>{CRICKET_TARGETS.map((target) => {
+                    const marks = player.cricketMarks?.[target] ?? 0
+                    return <div className="cricket-mark" key={target} aria-label={`${target === 25 ? 'Bull' : target}: ${marks} av 3 treff`}><strong>{target === 25 ? 'BULL' : target}</strong><span>{[0, 1, 2].map((mark) => <i key={mark} className={mark < marks ? 'marked' : ''} />)}</span></div>
+                  })}</div>}
                   <div className="legs-progress" aria-label={`${legsWon[player.id] ?? 0} av ${legsToWin} legg`}><div>{Array.from({ length: legsToWin }, (_, legIndex) => <span key={legIndex} className={legIndex < (legsWon[player.id] ?? 0) ? 'leg-pip earned' : 'leg-pip'} />)}</div><span>{legsWon[player.id] ?? 0} / {legsToWin} LEGG</span></div>
-                  <div className="player-stats" aria-label={`3-pilssnitt ${stats.average3.toFixed(1)}, ${stats.tons} 100-plussrunder, ${stats.oneEighties} 180-ere`}><div><strong>{stats.average3.toFixed(1)}</strong><span>3-PILSSNITT</span></div><div><strong>{stats.tons}</strong><span>100+</span></div><div><strong>{stats.oneEighties}</strong><span>180</span></div><div><strong>{stats.highestVisit}</strong><span>HØYESTE</span></div></div>
+                  {gameMode !== 'cricket' && <div className="player-stats" aria-label={`3-pilssnitt ${stats.average3.toFixed(1)}, ${stats.tons} 100-plussrunder, ${stats.oneEighties} 180-ere`}><div><strong>{stats.average3.toFixed(1)}</strong><span>3-PILSSNITT</span></div><div><strong>{stats.tons}</strong><span>100+</span></div><div><strong>{stats.oneEighties}</strong><span>180</span></div><div><strong>{stats.highestVisit}</strong><span>HØYESTE</span></div></div>}
                   <div className="player-card-bottom"><span>{legVisits.length} {legVisits.length === 1 ? 'TUR' : 'TURER'} I LEGG</span>{player.scoreCorrected ? <span className="last-visit">POENGSUM RETTET</span> : lastVisit && <span className={lastVisit.bust ? 'last-visit bust-label' : 'last-visit'}>{lastVisit.bust ? 'SISTE TUR: BUST' : lastVisit.checkout ? 'UTGANG' : `SISTE TUR: ${lastVisit.total}`}</span>}</div>
                 </article>
               )
@@ -784,11 +873,11 @@ function App() {
             <div className="winner-banner" role="status"><div><p className="eyebrow">{matchWinnerId ? 'KAMPEN ER AVGJORT' : `LEGG ${legNumber - 1} ER FERDIG`}</p><h2>{matchWinnerId ? `${winner.name} vant kampen.` : `${winner.name} vant leggen.`}</h2><p className="match-scoreline">{players.map((player) => `${player.name} ${legsWon[player.id] ?? 0}`).join('  ·  ')} <span>BEST AV {bestOfLegs}</span></p>{matchWinnerId && emailReportMessage && <p className="email-report-status" role="status">{emailReportMessage}</p>}</div><button className="primary-button" type="button" onClick={matchWinnerId ? newGame : startNextLeg}>{matchWinnerId ? 'Ny kamp' : 'Neste legg'} <span aria-hidden="true">↗</span></button></div>
           ) : (
             <form className="score-entry" onSubmit={recordVisit}>
-              <div className="entry-title"><div><p className="eyebrow">REGISTRER POENG</p><h2>{currentPlayer?.name}<span> sin tur</span></h2></div><span className="dart-counter">{entryMode === 'total' ? 'TOTALSUM' : '3 KAST'}</span></div>
-              {currentPlayer && currentPlayer.score <= 170 && <div className="checkout-hint" aria-live="polite"><div className="checkout-hint-copy"><span>UTGANGSFORSLAG</span><strong>{checkoutHint ?? 'Ingen utgang på tre piler'}</strong></div>{checkoutHint && <button className="checkout-apply" type="button" onClick={applyCheckoutSuggestion}>Bruk forslag</button>}</div>}
-              <div className="entry-mode" role="group" aria-label="Registreringsmåte"><button type="button" aria-pressed={entryMode === 'darts'} onClick={() => setEntryMode('darts')}>Velg piler</button><button type="button" aria-pressed={entryMode === 'total'} onClick={() => setEntryMode('total')}>Skriv totalsum</button></div>
-              {entryMode === 'darts' ? <div className="dart-inputs">{darts.map((dart, index) => (
-                <label className="dart-input" key={index}><span>PIL {index + 1}</span><select aria-label={`Velg kast for pil ${index + 1}`} required value={dart} onChange={(event) => changeDart(index, event.target.value)}><option value="" disabled>Velg kast</option>{DART_OPTION_GROUPS.map((group) => <optgroup key={group.label} label={group.label}>{group.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</optgroup>)}</select></label>
+              <div className="entry-title"><div><p className="eyebrow">{gameMode === 'cricket' ? 'REGISTRER TREFF' : 'REGISTRER POENG'}</p><h2>{currentPlayer?.name}<span> sin tur</span></h2></div><span className="dart-counter">{entryMode === 'total' && gameMode !== 'cricket' ? 'TOTALSUM' : '3 KAST'}</span></div>
+              {gameMode !== 'cricket' && currentPlayer && currentPlayer.score <= 170 && <div className="checkout-hint" aria-live="polite"><div className="checkout-hint-copy"><span>UTGANGSFORSLAG</span><strong>{checkoutHint ?? 'Ingen utgang på tre piler'}</strong></div>{checkoutHint && <button className="checkout-apply" type="button" onClick={applyCheckoutSuggestion}>Bruk forslag</button>}</div>}
+              {gameMode === 'cricket' ? <p className="cricket-entry-note">Registrer treff på 15–20 og bull for hver pil. Trippel gir tre treff, dobbel bull gir to.</p> : <div className="entry-mode" role="group" aria-label="Registreringsmåte"><button type="button" aria-pressed={entryMode === 'darts'} onClick={() => setEntryMode('darts')}>Velg piler</button><button type="button" aria-pressed={entryMode === 'total'} onClick={() => setEntryMode('total')}>Skriv totalsum</button></div>}
+              {entryMode === 'darts' || gameMode === 'cricket' ? <div className="dart-inputs">{darts.map((dart, index) => (
+                <label className="dart-input" key={index}><span>PIL {index + 1}</span><select aria-label={`Velg kast for pil ${index + 1}`} required value={dart} onChange={(event) => changeDart(index, event.target.value)}><option value="" disabled>Velg kast</option>{(gameMode === 'cricket' ? CRICKET_DART_OPTION_GROUPS : DART_OPTION_GROUPS).map((group) => <optgroup key={group.label} label={group.label}>{group.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</optgroup>)}</select></label>
               ))}<div className="visit-total"><span>TOTAL</span><strong>{darts.reduce((sum, value) => sum + (parseDartNotation(value)?.points ?? 0), 0)}</strong></div><button className="primary-button submit-score" type="submit">Før poeng <span aria-hidden="true">↗</span></button></div> : <div className="manual-score-entry">
                 <label className="manual-score-field"><span>TOTALSUM · 0–180</span><input aria-label="Totalsum for turen" autoComplete="off" inputMode="numeric" type="number" min="0" max="180" step="1" required value={manualTotal} onChange={(event) => { setManualTotal(event.target.value); setMessage('') }} placeholder="0" /></label>
                 <label className="manual-darts-field"><span>PILER BRUKT</span><select aria-label="Antall piler brukt" value={manualDartsThrown} onChange={(event) => setManualDartsThrown(Number(event.target.value) as 1 | 2 | 3)}><option value={1}>1 pil</option><option value={2}>2 piler</option><option value={3}>3 piler</option></select></label>
@@ -796,19 +885,19 @@ function App() {
                 <button className="primary-button submit-score" type="submit">Før poeng <span aria-hidden="true">↗</span></button>
               </div>}
               <div className="entry-bottom">
-                <div className="quick-scores" aria-label="Hurtigvalg for besøket">{Object.entries(QUICK_VISITS).map(([score, values]) => <button key={score} type="button" onClick={() => { if (entryMode === 'total') setManualTotal(score); else setDarts(values); setMessage('') }}>{score}</button>)}</div>
+                {gameMode !== 'cricket' && <div className="quick-scores" aria-label="Hurtigvalg for besøket">{Object.entries(QUICK_VISITS).map(([score, values]) => <button key={score} type="button" onClick={() => { if (entryMode === 'total') setManualTotal(score); else setDarts(values); setMessage('') }}>{score}</button>)}</div>}
               </div>
-              <p className="entry-message" aria-live="polite">{message || (entryMode === 'total' ? 'Ved utgang må du merke av dersom siste pil traff en dobbel.' : 'Velg enkel, dobbel, trippel eller bom for hver pil.')}</p>
+              <p className="entry-message" aria-live="polite">{message || (gameMode === 'cricket' ? 'Lukk alle feltene og ha minst like mange poeng som motstanderen.' : entryMode === 'total' ? 'Ved utgang må du merke av dersom siste pil traff en dobbel.' : 'Velg enkel, dobbel, trippel eller bom for hver pil.')}</p>
             </form>
           )}
-          <div className="game-footer"><span>501 <i /> DOBBEL UT</span><span>ANGRE RULLER TILBAKE SISTE TUR</span></div>
+          <div className="game-footer"><span>{gameMode === 'cricket' ? <>15–20 + BULL <i /> TRE TREFF</> : <>{gameMode} <i /> DOBBEL UT</>}</span><span>ANGRE RULLER TILBAKE SISTE TUR</span></div>
         </section>
       )}
       {scoreEditPlayer && <div className="score-edit-backdrop"><section className="score-edit-dialog" role="dialog" aria-modal="true" aria-labelledby="score-edit-title">
         <form onSubmit={saveScoreCorrection}>
           <p className="eyebrow">KORRIGER STILLING</p>
           <h2 id="score-edit-title">{scoreEditPlayer.name}</h2>
-          <label className="score-edit-field"><span>GJENVÆRENDE POENG · 0–501</span><input autoFocus aria-label="Korrigert poengsum" inputMode="numeric" type="number" min="0" max="501" step="1" value={scoreEditInput} onChange={(event) => { setScoreEditInput(event.target.value); setScoreEditError('') }} /></label>
+          <label className="score-edit-field"><span>GJENVÆRENDE POENG · 0–{gameMode === '121' ? 121 : 501}</span><input autoFocus aria-label="Korrigert poengsum" inputMode="numeric" type="number" min="0" max={gameMode === '121' ? 121 : 501} step="1" value={scoreEditInput} onChange={(event) => { setScoreEditInput(event.target.value); setScoreEditError('') }} /></label>
           {scoreEditInput === '0' && <label className="manual-double-toggle"><input type="checkbox" checked={scoreEditLastDartDouble} onChange={(event) => setScoreEditLastDartDouble(event.target.checked)} /><span className="custom-check" aria-hidden="true" />Siste pil traff en dobbel</label>}
           <p className="score-edit-note">Endringen kan angres med Angre.</p>
           {scoreEditError && <p className="score-edit-error" role="alert">{scoreEditError}</p>}

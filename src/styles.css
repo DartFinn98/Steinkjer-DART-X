@@ -75,6 +75,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .match-format { margin: 0 0 18px; padding: 0; border: 0; }
 .match-format legend { margin-bottom: 9px; color: var(--muted); font: 10px var(--mono); font-weight: 700; letter-spacing: 1.1px; }
 .format-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.game-mode-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .format-option { min-height: 36px; padding: 0 5px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 11px; cursor: pointer; }
 .format-option.selected { border-color: var(--green); background: var(--green); color: white; }
 .match-format > p { margin: 7px 0 0; color: var(--muted); font-size: 10px; }
@@ -177,6 +178,14 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .turn-tag, .winner-tag { display: flex; align-items: center; gap: 7px; color: var(--green); font-size: 9px; }
 .winner-tag { color: var(--orange); }
 .score-display { margin: 20px 0 16px; font-family: var(--mono); font-size: 76px; font-weight: 500; line-height: 1; font-variant-numeric: tabular-nums; }
+.cricket-score { display: flex; align-items: baseline; gap: 10px; }
+.cricket-score > span { color: var(--muted); font: 10px var(--mono); letter-spacing: 1px; }
+.cricket-mark-board { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; margin: -4px 0 14px; padding: 10px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.cricket-mark { min-width: 0; display: grid; justify-items: center; gap: 7px; }
+.cricket-mark strong { color: var(--muted); font: 700 10px var(--mono); }
+.cricket-mark > span { height: 15px; display: flex; align-items: center; gap: 4px; }
+.cricket-mark i { width: 2px; height: 12px; background: var(--line); transform: rotate(32deg); }
+.cricket-mark i.marked { background: var(--green); }
 .score-edit-button { display: flex; flex-direction: column; align-items: flex-start; padding: 0; border: 0; background: transparent; text-align: left; cursor: pointer; }
 .score-edit-button:disabled { cursor: default; opacity: 1; }
 .score-edit-cue { margin-top: 6px; color: var(--muted); font: 9px var(--mono); letter-spacing: .8px; }
@@ -220,6 +229,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .entry-mode { display: flex; gap: 5px; margin: 0 0 13px; }
 .entry-mode button { min-height: 33px; padding: 0 12px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 11px; cursor: pointer; }
 .entry-mode button[aria-pressed="true"] { border-color: var(--green); background: var(--green); color: white; }
+.cricket-entry-note { margin: -2px 0 13px; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .dart-inputs { display: grid; grid-template-columns: repeat(3, minmax(74px, 1fr)) minmax(76px, .9fr) auto; gap: 9px; align-items: end; }
 .dart-input { display: grid; gap: 7px; }
 .dart-input > span, .visit-total > span { font: 10px var(--mono); letter-spacing: 1px; }

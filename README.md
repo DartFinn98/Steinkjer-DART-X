@@ -1,6 +1,6 @@
 # Steinkjer DART-X
 
-Norsk poengtavle for 501 med stålpiler. Lagre og velg spillere fra spillerlisten, velg best av 3, 5 eller 7 legger, og registrer kastene enkeltvis eller som en totalsum. Trykk på poengsummen for å rette den; bruk Angre for å rulle tilbake en retting eller et kast. Steinkjer DART-X håndterer bust og dobbel ut, viser legg- og kampresultater og kan installeres som en nettapp.
+Norsk poengtavle for 501, Cricket og 121-utgang med stålpiler. Lagre og velg spillere fra spillerlisten, velg best av 3, 5 eller 7 legger, og registrer kastene enkeltvis eller som en totalsum. Trykk på poengsummen for å rette den; bruk Angre for å rulle tilbake en retting eller et kast. Steinkjer DART-X håndterer bust og dobbel ut, viser legg- og kampresultater og kan installeres som en nettapp.
 
 Spillernavn kan legges til, velges og slettes fra spillerlisten. Når Supabase er konfigurert, deler innloggede brukere spillerlisten og kampresultatene. På en enhet der appen allerede er åpnet på nett, kan den også brukes offline. Lokale endringer lagres på enheten og synkroniseres når forbindelsen kommer tilbake; e-postrapporter legges også i kø. Uten Supabase lagres data bare lokalt i nettleseren. Sletting av en spillerprofil fjerner ikke tidligere kampresultater.
 
@@ -53,7 +53,9 @@ Etter en vunnet kamp sendes rapporten til e-postadressen til brukeren som er log
 
 ## Regler
 
-Alle spillere starter på 501. Hver tur består av tre piler, med opptil 60 poeng per pil. Ved dobbel ut må den siste pilen treffe en dobbel. Du får bust hvis du går under 0, står igjen med 1 eller treffer 0 uten å avslutte med en dobbel. Da beholder du poengsummen fra før turen, og turen går videre.
+501 starter på 501 poeng, mens 121-utgang starter på 121. Begge bruker dobbel ut: siste pil må treffe en dobbel. Bust skjer hvis du går under 0, står igjen med 1 eller treffer 0 uten dobbel; poengsummen fra før turen beholdes.
+
+I Cricket teller feltene 15–20 og bull. Tre treff lukker et felt; dobbel teller to treff, trippel tre, og indre bull to. Treff på et lukket felt gir poeng så lenge minst én motspiller ikke har lukket feltet. Alle feltene må være lukket, og du må ha minst like mange poeng som hver motspiller, for å vinne.
 
 Når du registrerer en totalsum, må du også merke av hvis den siste pilen traff en dobbel for å fullføre en utgang.
 
