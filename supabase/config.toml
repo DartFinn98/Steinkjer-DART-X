@@ -1,0 +1,2 @@
+[functions.send-match-report]
+verify_jwt = true

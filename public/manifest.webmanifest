@@ -1,0 +1,11 @@
+{
+  "name": "Steinkjer DART-X",
+  "short_name": "DART-X",
+  "description": "Poengtavle for 501 med stålpiler.",
+  "lang": "nb",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f1e9",
+  "theme_color": "#f4f1e9",
+  "icons": [{ "src": "/dart-mark.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
