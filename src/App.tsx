@@ -18,6 +18,18 @@ type Snapshot = { players: Player[]; activePlayer: number; winnerId: string | nu
 type EntryMode = 'darts' | 'total'
 type GamePhase = 'setup' | 'bull-off' | 'leg-bull-off' | 'playing'
 type CoinSide = 'kron' | 'mynt'
+type CourtNumber = 1 | 2 | 3 | 4 | 5
+
+function getSavedCourtNumber(): CourtNumber {
+  try {
+    const savedCourtNumber = Number(window.localStorage.getItem('darttavla-court-number'))
+    return ([1, 2, 3, 4, 5] as const).includes(savedCourtNumber as CourtNumber)
+      ? savedCourtNumber as CourtNumber
+      : 1
+  } catch {
+    return 1
+  }
+}
 type CoinTossButtonProps = {
   disabled: boolean
   flipping: boolean
@@ -127,6 +139,7 @@ function App() {
   const [gameMode, setGameMode] = useState<GameMode>('501')
   const [teamMode, setTeamMode] = useState(false)
   const teamPreviousPlayerCount = useRef(2)
+  const [courtNumber, setCourtNumber] = useState<CourtNumber>(getSavedCourtNumber)
   const [bestOfLegs, setBestOfLegs] = useState<3 | 5 | 7>(3)
   const [playerNames, setPlayerNames] = useState<string[]>(['', ''])
   const [newRosterName, setNewRosterName] = useState('')
@@ -169,6 +182,14 @@ function App() {
   const [emailReportMessage, setEmailReportMessage] = useState('')
   const [isOnline, setIsOnline] = useState(() => navigator.onLine)
   const [reopenedMatchId, setReopenedMatchId] = useState<string | null>(null)
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('darttavla-court-number', String(courtNumber))
+    } catch {
+      return
+    }
+  }, [courtNumber])
 
   useEffect(() => {
     if (!supabase) return
@@ -449,6 +470,7 @@ function App() {
         id: reopenedMatchId ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         playedAt: new Date().toISOString(),
         winnerName: teamMode && legWinner ? teamDisplayName(completedPlayers, legWinner) : legWinner?.name ?? '',
+        courtNumber,
         gameMode,
         bestOfLegs,
         finishMethod,
@@ -703,6 +725,7 @@ function App() {
 
     setPlayerCount(restoredPlayers.length)
     setTeamMode(reopenedTeamMode)
+    setCourtNumber(match.courtNumber ?? 1)
     setGameMode(match.gameMode ?? '501')
     setPlayerNames(restoredPlayers.map((player) => player.name))
     setPlayers(restoredPlayers)
@@ -826,7 +849,7 @@ function App() {
           <img className="brand-logo" src="/logo.png" alt="" />
           <span>STEINKJER <span className="brand-dot">DART-X</span></span>
         </a>
-        <div className="topbar-meta">{isOnline ? <span className="live-dot" /> : <span className="offline-dot" />} {isOnline ? gameMode === 'cricket' ? 'CRICKET' : `${gameMode} / DOBBEL UT` : 'OFFLINE'} {session && <button className="sign-out-button" type="button" onClick={signOut}>Logg ut</button>}{!supabase && <span className="local-mode-tag">LOKAL MODUS</span>}</div>
+        <div className="topbar-meta">{isOnline ? <span className="live-dot" /> : <span className="offline-dot" />} {isOnline ? gameMode === 'cricket' ? 'CRICKET' : `${gameMode} / DOBBEL UT` : 'OFFLINE'} <span className="court-indicator">BANE {courtNumber}</span> {session && <button className="sign-out-button" type="button" onClick={signOut}>Logg ut</button>}{!supabase && <span className="local-mode-tag">LOKAL MODUS</span>}</div>
       </header>
       {databaseMessage && <p className="database-message" role="status">{databaseMessage}</p>}
 
@@ -854,6 +877,10 @@ function App() {
               <legend>KAMPFORMAT</legend>
               <div className="format-options">{([3, 5, 7] as const).map((format) => <button key={format} type="button" aria-pressed={bestOfLegs === format} className={bestOfLegs === format ? 'format-option selected' : 'format-option'} onClick={() => setBestOfLegs(format)}>Best av {format}</button>)}</div>
               <p>Først til {Math.ceil(bestOfLegs / 2)} {gameMode === '121' ? Math.ceil(bestOfLegs / 2) === 1 ? 'runde' : roundWordPlural : Math.ceil(bestOfLegs / 2) === 1 ? 'legg' : roundWordPlural} vinner kampen.</p>
+            </fieldset>
+            <fieldset className="court-select">
+              <legend>BANE</legend>
+              <div className="count-options court-options">{([1, 2, 3, 4, 5] as const).map((court) => <button key={court} type="button" aria-pressed={courtNumber === court} className={courtNumber === court ? 'count-option selected' : 'count-option'} onClick={() => setCourtNumber(court)}>{court}</button>)}</div>
             </fieldset>
             <div className="name-fields">{names.map((name, index) => (
               <label className="name-field" key={index}>
@@ -888,7 +915,7 @@ function App() {
             <ul>{savedData.matches.slice(0, 5).map((match) => <li key={match.id}>
               <time dateTime={match.playedAt}>{new Intl.DateTimeFormat('nb-NO', { dateStyle: 'medium' }).format(new Date(match.playedAt))}</time>
               <strong>{match.winnerName} vant</strong>
-              <span>{match.gameMode && match.gameMode !== '501' ? `${match.gameMode === '121' ? '121 utgang' : 'Cricket'} · ` : ''}{formatSavedMatchPlayers(match)}{match.bestOfLegs ? ` · Best av ${match.bestOfLegs}` : ''}</span>
+              <span>Bane {match.courtNumber ?? 1} · {match.gameMode && match.gameMode !== '501' ? `${match.gameMode === '121' ? '121 utgang' : 'Cricket'} · ` : ''}{formatSavedMatchPlayers(match)}{match.bestOfLegs ? ` · Best av ${match.bestOfLegs}` : ''}</span>
               {match.finishMethod && <button className="reopen-match-button" type="button" onClick={() => reopenSavedMatch(match)}>Åpne kampen igjen</button>}
             </li>)}</ul>
           </section>}

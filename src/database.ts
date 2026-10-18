@@ -11,6 +11,7 @@ export type SavedMatch = {
   id: string
   playedAt: string
   winnerName: string
+  courtNumber?: 1 | 2 | 3 | 4 | 5
   gameMode?: '501' | 'cricket' | '121'
   bestOfLegs?: 3 | 5 | 7
   finishMethod?: 'checkout' | 'bull-off'
@@ -168,7 +169,7 @@ export async function loadSavedData(): Promise<SavedData> {
   try {
     const [playersResult, matchesResult] = await Promise.all([
       supabase.from('players').select('id, name, last_played_at').order('last_played_at', { ascending: false }),
-      supabase.from('matches').select('id, played_at, winner_name, game_mode, best_of_legs, finish_method, leg_starter_name, players').order('played_at', { ascending: false }),
+      supabase.from('matches').select('id, played_at, winner_name, court_number, game_mode, best_of_legs, finish_method, leg_starter_name, players').order('played_at', { ascending: false }),
     ])
 
     if (playersResult.error) throw playersResult.error
@@ -184,6 +185,7 @@ export async function loadSavedData(): Promise<SavedData> {
         id: match.id,
         playedAt: match.played_at,
         winnerName: match.winner_name,
+        courtNumber: match.court_number as SavedMatch['courtNumber'],
         gameMode: match.game_mode as SavedMatch['gameMode'],
         bestOfLegs: match.best_of_legs as 3 | 5 | 7 | undefined,
         finishMethod: match.finish_method as SavedMatch['finishMethod'],
@@ -258,6 +260,7 @@ export async function saveFinishedMatch(match: SavedMatch): Promise<void> {
     id: match.id,
     played_at: match.playedAt,
     winner_name: match.winnerName,
+    court_number: match.courtNumber ?? 1,
     game_mode: match.gameMode ?? '501',
     best_of_legs: match.bestOfLegs ?? null,
     finish_method: match.finishMethod ?? null,
@@ -310,6 +313,7 @@ export async function syncPendingChanges(): Promise<{ synced: number; pending: n
           id: change.match.id,
           played_at: change.match.playedAt,
           winner_name: change.match.winnerName,
+          court_number: change.match.courtNumber ?? 1,
           game_mode: change.match.gameMode ?? '501',
           best_of_legs: change.match.bestOfLegs ?? null,
           finish_method: change.match.finishMethod ?? null,

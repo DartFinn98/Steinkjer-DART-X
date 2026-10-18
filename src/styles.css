@@ -31,6 +31,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .topbar-meta { display: flex; align-items: center; gap: 9px; color: var(--muted); }
 .topbar-meta .sign-out-button { min-height: 30px; padding: 0 9px; border: 1px solid var(--line); background: transparent; color: var(--green); font-size: 10px; font-weight: 700; cursor: pointer; }
 .topbar-meta .sign-out-button:hover { border-color: var(--green); }
+.court-indicator { padding: 4px 6px; border: 1px solid var(--line); color: var(--green); font: 9px var(--mono); white-space: nowrap; }
 .local-mode-tag { padding: 4px 6px; border: 1px solid var(--line); color: var(--muted); font-size: 8px; }
 .offline-dot { display: inline-block; width: 7px; aspect-ratio: 1; border-radius: 50%; background: var(--orange); box-shadow: 0 0 0 3px #ec68481c; }
 .database-message { max-width: 1180px; margin: 12px auto 0; color: var(--orange); font-size: 12px; }
@@ -78,6 +79,9 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .match-format { margin: 0 0 18px; padding: 0; border: 0; }
 .match-format legend { margin-bottom: 9px; color: var(--muted); font: 10px var(--mono); font-weight: 700; letter-spacing: 1.1px; }
 .format-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.court-select { margin: 0 0 18px; padding: 0; border: 0; }
+.court-select legend { margin-bottom: 9px; color: var(--muted); font: 10px var(--mono); font-weight: 700; letter-spacing: 1.1px; }
+.court-options { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .game-mode-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .format-option { min-height: 36px; padding: 0 5px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 11px; cursor: pointer; }
 .format-option.selected { border-color: var(--green); background: var(--green); color: white; }
