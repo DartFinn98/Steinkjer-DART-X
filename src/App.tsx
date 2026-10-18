@@ -121,6 +121,7 @@ function App() {
   const [playerCount, setPlayerCount] = useState(2)
   const [gameMode, setGameMode] = useState<GameMode>('501')
   const [teamMode, setTeamMode] = useState(false)
+  const teamPreviousPlayerCount = useRef(2)
   const [bestOfLegs, setBestOfLegs] = useState<3 | 5 | 7>(3)
   const [playerNames, setPlayerNames] = useState<string[]>(['', ''])
   const [newRosterName, setNewRosterName] = useState('')
@@ -837,7 +838,7 @@ function App() {
               <legend>ANTALL SPILLERE</legend>
               <div className="count-options">{[1, 2, 3, 4].filter((count) => gameMode !== 'cricket' || count > 1).map((count) => <button key={count} type="button" disabled={teamMode && count !== 4} aria-pressed={playerCount === count} className={playerCount === count ? 'count-option selected' : 'count-option'} onClick={() => { cancelCoinFlip(); setPlayerCount(count); setRosterSlot((slot) => Math.min(slot, count - 1)); setCoinResult(null); setCoinStarterIndex(null) }}>{count}</button>)}</div>
             </fieldset>
-            <label className="manual-double-toggle team-mode-toggle"><input type="checkbox" checked={teamMode} onChange={(event) => { const enabled = event.target.checked; cancelCoinFlip(); setTeamMode(enabled); if (enabled) { setPlayerCount(4); setPlayerNames((current) => Array.from({ length: 4 }, (_, index) => current[index] ?? '')) } setRosterSlot((slot) => Math.min(slot, enabled ? 3 : playerCount - 1)); setCoinResult(null); setCoinStarterIndex(null) }} /><span className="custom-check" aria-hidden="true" />Spill dobler · 2 mot 2</label>
+            <label className="manual-double-toggle team-mode-toggle"><input type="checkbox" checked={teamMode} onChange={(event) => { const enabled = event.target.checked; cancelCoinFlip(); if (enabled) teamPreviousPlayerCount.current = playerCount; const nextPlayerCount = enabled ? 4 : teamPreviousPlayerCount.current; setTeamMode(enabled); setPlayerCount(nextPlayerCount); setPlayerNames((current) => Array.from({ length: nextPlayerCount }, (_, index) => current[index] ?? '')); setRosterSlot((slot) => Math.min(slot, nextPlayerCount - 1)); setCoinResult(null); setCoinStarterIndex(null) }} /><span className="custom-check" aria-hidden="true" />Spill dobler · 2 mot 2</label>
             <fieldset className="match-format game-mode-format">
               <legend>SPILLTYPE</legend>
               <div className="game-mode-options">{([{ id: '501', label: '501' }, { id: 'cricket', label: 'Cricket' }, { id: '121', label: '121 utgang' }] as const).map((mode) => <button key={mode.id} type="button" aria-pressed={gameMode === mode.id} className={gameMode === mode.id ? 'format-option selected' : 'format-option'} onClick={() => selectGameMode(mode.id)}>{mode.label}</button>)}</div>

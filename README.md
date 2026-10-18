@@ -1,6 +1,6 @@
 # Steinkjer DART-X
 
-Norsk poengtavle for 501, Cricket og 121-utgang med stålpiler. Lagre og velg spillere fra spillerlisten, velg best av 3, 5 eller 7 legger, og registrer kastene enkeltvis eller som en totalsum. Trykk på poengsummen for å rette den; bruk Angre for å rulle tilbake en retting eller et kast. Steinkjer DART-X håndterer bust og dobbel ut, viser legg- og kampresultater og kan installeres som en nettapp.
+Norsk poengtavle for 501, Cricket og 121-utgang med stålpiler. Spill individuelt med én til fire spillere, eller dobbel i 2 mot 2. Lagkamerater deler poengsum og Cricket-felt og kaster annenhver tur. Lagre og velg spillere fra spillerlisten, velg best av 3, 5 eller 7 legger, og registrer kastene enkeltvis eller som en totalsum. Trykk på poengsummen for å rette den; bruk Angre for å rulle tilbake en retting eller et kast. Steinkjer DART-X håndterer bust og dobbel ut, viser legg- og kampresultater og kan installeres som en nettapp.
 
 Spillernavn kan legges til, velges og slettes fra spillerlisten. Når Supabase er konfigurert, deler innloggede brukere spillerlisten og kampresultatene. På en enhet der appen allerede er åpnet på nett, kan den også brukes offline. Lokale endringer lagres på enheten og synkroniseres når forbindelsen kommer tilbake; e-postrapporter legges også i kø. Uten Supabase lagres data bare lokalt i nettleseren. Sletting av en spillerprofil fjerner ikke tidligere kampresultater.
 
