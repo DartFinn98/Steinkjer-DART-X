@@ -134,6 +134,17 @@ function formatSavedMatchPlayers(match: SavedData['matches'][number]): string {
     : `${player.name}: ${player.legsWon} ${match.gameMode === '121' ? player.legsWon === 1 ? 'runde' : 'runder' : player.legsWon === 1 ? 'legg' : 'legger'}`).join(' · ')
 }
 
+function formatSavedVisit(visit: SavedData['matches'][number]['players'][number]['visits'][number]): string {
+  if (visit.cricketDarts?.length) {
+    return visit.cricketDarts.map((dart) => {
+      if (dart.target === null) return 'Bom'
+      const target = dart.target === 25 ? 'Bull' : String(dart.target)
+      return dart.marks > 1 ? `${target} ×${dart.marks}` : target
+    }).join(' · ')
+  }
+  return visit.darts ? visit.darts.join(' + ') : `${visit.total} poeng · manuelt`
+}
+
 function App() {
   const [playerCount, setPlayerCount] = useState(2)
   const [gameMode, setGameMode] = useState<GameMode>('501')
@@ -165,6 +176,10 @@ function App() {
   const [manualDartsThrown, setManualDartsThrown] = useState<1 | 2 | 3>(3)
   const [manualLastDartDouble, setManualLastDartDouble] = useState(false)
   const [checkoutTableOpen, setCheckoutTableOpen] = useState(false)
+  const [historySearch, setHistorySearch] = useState('')
+  const [historyGameMode, setHistoryGameMode] = useState<GameMode | 'all'>('all')
+  const [historyCourt, setHistoryCourt] = useState<CourtNumber | 'all'>('all')
+  const [selectedMatch, setSelectedMatch] = useState<SavedData['matches'][number] | null>(null)
   const [scoreEditPlayerId, setScoreEditPlayerId] = useState<string | null>(null)
   const [scoreEditInput, setScoreEditInput] = useState('')
   const [scoreEditLastDartDouble, setScoreEditLastDartDouble] = useState(false)
@@ -286,6 +301,15 @@ function App() {
   const roundWordPlural = gameMode === '121' ? 'runder' : 'legger'
   const checkoutHint = currentPlayer && gameMode !== 'cricket' ? getCheckoutHint(currentPlayer.score) : null
   const names = Array.from({ length: playerCount }, (_, index) => playerNames[index] ?? '')
+  const normalizedHistorySearch = historySearch.trim().toLocaleLowerCase('nb-NO')
+  const filteredSavedMatches = savedData.matches.filter((match) => {
+    const matchesMode = historyGameMode === 'all' || (match.gameMode ?? '501') === historyGameMode
+    const matchesCourt = historyCourt === 'all' || (match.courtNumber ?? 1) === historyCourt
+    const searchableText = [match.winnerName, ...match.players.map((player) => player.name), `bane ${match.courtNumber ?? 1}`]
+      .join(' ')
+      .toLocaleLowerCase('nb-NO')
+    return matchesMode && matchesCourt && (!normalizedHistorySearch || searchableText.includes(normalizedHistorySearch))
+  })
   const bullThrowOrder = players.length > 0 && coinStarterIndex !== null
     ? players.map((_, offset) => players[(coinStarterIndex + offset) % players.length])
     : players
@@ -664,16 +688,17 @@ function App() {
 
   function reopenSavedMatch(match: SavedData['matches'][number]) {
     if (!match.finishMethod || match.players.length === 0) return
+    setSelectedMatch(null)
     const isCricket = match.gameMode === 'cricket'
     const reopenedPlayers = match.players.map((savedPlayer) => {
       const marksVisits = savedPlayer.teamId
-        ? match.players.filter((player) => player.teamId === savedPlayer.teamId).flatMap((player) => player.visits)
-        : savedPlayer.visits
+        ? match.players.filter((player) => player.teamId === savedPlayer.teamId).flatMap((player) => player.visits ?? [])
+        : savedPlayer.visits ?? []
       return {
         id: savedPlayer.name.trim().toLowerCase(),
         name: savedPlayer.name,
         score: savedPlayer.score,
-        visits: savedPlayer.visits.map((visit) => ({ ...visit })),
+        visits: (savedPlayer.visits ?? []).map((visit) => ({ ...visit })),
         ...(savedPlayer.teamId ? { teamId: savedPlayer.teamId } : {}),
         ...(isCricket ? { cricketMarks: countCricketMarks(marksVisits) } : {}),
         scoreCorrected: false,
@@ -910,14 +935,18 @@ function App() {
             <button className="primary-button start-button" type="submit" disabled={playerCount > 1 && coinStarterIndex === null}>{playerCount > 1 ? 'Start bullkast' : 'Start kamp'} <span aria-hidden="true">↗</span></button>
             <p className="form-note">{playerCount > 1 ? 'Myntkastet bestemmer rekkefølgen for bullkastet. ' : ''}Spillernavn lagres automatisk.</p>
           </form>
-          {savedData.matches.length > 0 && <section className="saved-history" aria-label="Tidligere kamper">
-            <div className="saved-history-heading"><div><p className="eyebrow">LOKALT LAGRET</p><h2>Siste kamper</h2></div><span>{savedData.matches.length} KAMPER</span></div>
-            <ul>{savedData.matches.slice(0, 5).map((match) => <li key={match.id}>
-              <time dateTime={match.playedAt}>{new Intl.DateTimeFormat('nb-NO', { dateStyle: 'medium' }).format(new Date(match.playedAt))}</time>
-              <strong>{match.winnerName} vant</strong>
-              <span>Bane {match.courtNumber ?? 1} · {match.gameMode && match.gameMode !== '501' ? `${match.gameMode === '121' ? '121 utgang' : 'Cricket'} · ` : ''}{formatSavedMatchPlayers(match)}{match.bestOfLegs ? ` · Best av ${match.bestOfLegs}` : ''}</span>
-              {match.finishMethod && <button className="reopen-match-button" type="button" onClick={() => reopenSavedMatch(match)}>Åpne kampen igjen</button>}
-            </li>)}</ul>
+          {savedData.matches.length > 0 && <section className="saved-history" aria-label="Kamphistorikk">
+            <div className="saved-history-heading"><div><p className="eyebrow">LAGRET HISTORIKK</p><h2>Kamparkiv</h2></div><span>{filteredSavedMatches.length} / {savedData.matches.length} KAMPER</span></div>
+            <div className="history-filters">
+              <label className="history-filter-search"><span>SØK SPILLER ELLER LAG</span><input type="search" value={historySearch} onChange={(event) => setHistorySearch(event.target.value)} placeholder="Navn" /></label>
+              <label><span>SPILLTYPE</span><select value={historyGameMode} onChange={(event) => setHistoryGameMode(event.target.value as GameMode | 'all')}><option value="all">Alle</option><option value="501">501</option><option value="cricket">Cricket</option><option value="121">121 utgang</option></select></label>
+              <label><span>BANE</span><select value={historyCourt} onChange={(event) => setHistoryCourt(event.target.value === 'all' ? 'all' : Number(event.target.value) as CourtNumber)}><option value="all">Alle</option>{([1, 2, 3, 4, 5] as const).map((court) => <option key={court} value={court}>Bane {court}</option>)}</select></label>
+            </div>
+            {filteredSavedMatches.length > 0 ? <ul className="saved-history-list">{filteredSavedMatches.map((match) => <li key={match.id}>
+              <div className="history-match-main"><time dateTime={match.playedAt}>{new Intl.DateTimeFormat('nb-NO', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(match.playedAt))}</time><strong>{match.winnerName} vant</strong></div>
+              <span className="history-match-summary">Bane {match.courtNumber ?? 1} · {match.gameMode === 'cricket' ? 'Cricket' : match.gameMode === '121' ? '121 utgang' : '501'} · {formatSavedMatchPlayers(match)}{match.bestOfLegs ? ` · Best av ${match.bestOfLegs}` : ''}</span>
+              <div className="history-match-actions"><button className="history-details-button" type="button" onClick={() => setSelectedMatch(match)}>Vis detaljer</button>{match.finishMethod && <button className="reopen-match-button" type="button" onClick={() => reopenSavedMatch(match)}>Åpne kampen igjen</button>}</div>
+            </li>)}</ul> : <p className="saved-history-empty">Ingen kamper passer til søket.</p>}
           </section>}
           <div className="setup-stamp" aria-hidden="true">NORSK<br />DART<br /><b>501</b></div>
         </section>
@@ -1018,6 +1047,16 @@ function App() {
           <div className="game-footer"><span>{gameMode === 'cricket' ? <>15–20 + BULL <i /> TRE TREFF</> : <>{gameMode} <i /> DOBBEL UT</>}</span><span>ANGRE RULLER TILBAKE SISTE TUR</span></div>
         </section>
       )}
+      {selectedMatch && <div className="history-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedMatch(null) }}><section className="history-dialog" role="dialog" aria-modal="true" aria-labelledby="history-dialog-title" tabIndex={-1} onKeyDown={(event) => { if (event.key === 'Escape') setSelectedMatch(null) }}>
+        <header className="history-dialog-heading"><div><p className="eyebrow">ARKIVERT KAMP · BANE {selectedMatch.courtNumber ?? 1}</p><h2 id="history-dialog-title">{selectedMatch.winnerName} vant</h2><p>{new Intl.DateTimeFormat('nb-NO', { dateStyle: 'full', timeStyle: 'short' }).format(new Date(selectedMatch.playedAt))} · {selectedMatch.gameMode === 'cricket' ? 'Cricket' : selectedMatch.gameMode === '121' ? '121 utgang' : '501'}{selectedMatch.bestOfLegs ? ` · Best av ${selectedMatch.bestOfLegs}` : ''}{selectedMatch.finishMethod ? ` · ${selectedMatch.finishMethod === 'bull-off' ? 'Bullkast' : 'Dobbel ut'}` : ''}</p></div><button className="text-button" type="button" onClick={() => setSelectedMatch(null)}>Lukk</button></header>
+        {selectedMatch.legStarterName && <p className="history-dialog-starter">Startet på {selectedMatch.legStarterName}</p>}
+        <div className="history-player-details">{selectedMatch.players.map((player) => <article className="history-player-detail" key={player.name}>
+          <div className="history-player-heading"><h3>{player.teamId && <span>LAG {player.teamId} · </span>}{player.name}</h3><strong>{player.legsWon ?? 0} {player.legsWon === 1 ? selectedMatch.gameMode === '121' ? 'runde' : 'legg' : selectedMatch.gameMode === '121' ? 'runder' : 'legger'}</strong></div>
+          <dl className="history-player-stats"><div><dt>SLUTTPOENG</dt><dd>{player.score}</dd></div><div><dt>3-PILSSNITT</dt><dd>{(player.average3 ?? 0).toFixed(1)}</dd></div><div><dt>PILER</dt><dd>{player.dartsThrown ?? 0}</dd></div><div><dt>HØYESTE</dt><dd>{player.highestVisit ?? 0}</dd></div><div><dt>180</dt><dd>{player.oneEighties ?? 0}</dd></div><div><dt>RASK UTGANG</dt><dd>{player.fastestCheckoutDarts ?? '—'}</dd></div></dl>
+          <h4>TURER</h4>
+          {(player.visits ?? []).length > 0 ? <ol className="history-visits">{(player.visits ?? []).map((visit, index) => <li key={`${visit.legNumber}-${index}`}><span>{selectedMatch.gameMode === '121' ? 'RUNDE' : 'LEGG'} {visit.legNumber} · TUR {index + 1}</span><strong>{formatSavedVisit(visit)}</strong><span>{visit.bust ? 'BUST' : visit.checkout ? 'UTGANG' : `${visit.total} POENG`} · {visit.dartsThrown ?? 3} PILER</span></li>)}</ol> : <p className="history-no-visits">Ingen turer ble lagret for denne kampen.</p>}
+        </article>)}</div>
+      </section></div>}
       {scoreEditPlayer && <div className="score-edit-backdrop"><section className="score-edit-dialog" role="dialog" aria-modal="true" aria-labelledby="score-edit-title">
         <form onSubmit={saveScoreCorrection}>
           <p className="eyebrow">KORRIGER STILLING</p>
