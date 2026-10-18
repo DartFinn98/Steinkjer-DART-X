@@ -34,12 +34,14 @@ type PendingChange =
   | { id: string; kind: 'save-players'; players: SavedPlayer[]; queuedAt: number }
   | { id: string; kind: 'delete-player'; playerId: string; queuedAt: number }
   | { id: string; kind: 'save-match'; match: SavedMatch; queuedAt: number }
+  | { id: string; kind: 'delete-match'; matchId: string; queuedAt: number }
   | { id: string; kind: 'send-email'; match: SavedMatch; queuedAt: number }
 
 type PendingPayload =
   | { kind: 'save-players'; players: SavedPlayer[] }
   | { kind: 'delete-player'; playerId: string }
   | { kind: 'save-match'; match: SavedMatch }
+  | { kind: 'delete-match'; matchId: string }
   | { kind: 'send-email'; match: SavedMatch }
 
 let pendingSequence = 0
@@ -270,6 +272,17 @@ export async function saveFinishedMatch(match: SavedMatch): Promise<void> {
   if (playersError || matchError) await queueChange({ kind: 'save-match', match })
 }
 
+export async function deleteSavedMatch(matchId: string): Promise<void> {
+  const database = await openDatabase()
+  const transaction = database.transaction(MATCH_STORE, 'readwrite')
+  transaction.objectStore(MATCH_STORE).delete(matchId)
+  await transactionComplete(database, transaction)
+
+  if (!supabase) return
+  await queueChange({ kind: 'delete-match', matchId })
+  if (navigator.onLine) await syncPendingChanges()
+}
+
 export async function sendMatchReport(match: SavedMatch): Promise<'sent' | 'queued' | 'unavailable'> {
   if (!supabase) return 'unavailable'
   if (!navigator.onLine) {
@@ -321,6 +334,9 @@ export async function syncPendingChanges(): Promise<{ synced: number; pending: n
           players: change.match.players,
         }, { onConflict: 'id' })
         if (matchError) continue
+      } else if (change.kind === 'delete-match') {
+        const { error } = await supabase.from('matches').delete().eq('id', change.matchId)
+        if (error) continue
       } else {
         const { error } = await supabase.functions.invoke('send-match-report', { body: change.match })
         if (error) continue

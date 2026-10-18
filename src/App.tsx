@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { getCheckoutHint } from './checkout'
-import { deleteSavedPlayer, loadSavedData, saveFinishedMatch, savePlayers, sendMatchReport, syncPendingChanges } from './database'
+import { deleteSavedMatch, deleteSavedPlayer, loadSavedData, saveFinishedMatch, savePlayers, sendMatchReport, syncPendingChanges } from './database'
 import type { SavedData } from './database'
 import { supabase } from './supabase'
 import type { Session } from '@supabase/supabase-js'
@@ -179,6 +179,7 @@ function App() {
   const [historySearch, setHistorySearch] = useState('')
   const [historyGameMode, setHistoryGameMode] = useState<GameMode | 'all'>('all')
   const [historyCourt, setHistoryCourt] = useState<CourtNumber | 'all'>('all')
+  const [matchPendingDeleteId, setMatchPendingDeleteId] = useState<string | null>(null)
   const [selectedMatch, setSelectedMatch] = useState<SavedData['matches'][number] | null>(null)
   const [scoreEditPlayerId, setScoreEditPlayerId] = useState<string | null>(null)
   const [scoreEditInput, setScoreEditInput] = useState('')
@@ -427,6 +428,18 @@ function App() {
       setPlayerPendingDeleteId(null)
     } catch {
       setDatabaseMessage('Spilleren kunne ikke slettes fra spillerlisten.')
+    }
+  }
+
+  async function removeSavedMatch(matchId: string) {
+    if (!savedData.matches.some((match) => match.id === matchId)) return
+    try {
+      await deleteSavedMatch(matchId)
+      setSavedData((current) => ({ ...current, matches: current.matches.filter((match) => match.id !== matchId) }))
+      setSelectedMatch((current) => current?.id === matchId ? null : current)
+      setMatchPendingDeleteId(null)
+    } catch {
+      setDatabaseMessage('Kampen kunne ikke slettes fra arkivet.')
     }
   }
 
@@ -945,7 +958,7 @@ function App() {
             {filteredSavedMatches.length > 0 ? <ul className="saved-history-list">{filteredSavedMatches.map((match) => <li key={match.id}>
               <div className="history-match-main"><time dateTime={match.playedAt}>{new Intl.DateTimeFormat('nb-NO', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(match.playedAt))}</time><strong>{match.winnerName} vant</strong></div>
               <span className="history-match-summary">Bane {match.courtNumber ?? 1} · {match.gameMode === 'cricket' ? 'Cricket' : match.gameMode === '121' ? '121 utgang' : '501'} · {formatSavedMatchPlayers(match)}{match.bestOfLegs ? ` · Best av ${match.bestOfLegs}` : ''}</span>
-              <div className="history-match-actions"><button className="history-details-button" type="button" onClick={() => setSelectedMatch(match)}>Vis detaljer</button>{match.finishMethod && <button className="reopen-match-button" type="button" onClick={() => reopenSavedMatch(match)}>Åpne kampen igjen</button>}</div>
+              <div className="history-match-actions"><button className="history-details-button" type="button" onClick={() => setSelectedMatch(match)}>Vis detaljer</button>{match.finishMethod && <button className="reopen-match-button" type="button" onClick={() => reopenSavedMatch(match)}>Åpne kampen igjen</button>}{matchPendingDeleteId === match.id ? <><span className="history-delete-prompt" role="status">Slette kampen?</span><button className="history-delete-confirm" type="button" onClick={() => void removeSavedMatch(match.id)}>Ja, slett</button><button className="history-delete-cancel" type="button" onClick={() => setMatchPendingDeleteId(null)}>Avbryt</button></> : <button className="history-delete-button" type="button" aria-label={`Slett kamp vunnet av ${match.winnerName}`} onClick={() => setMatchPendingDeleteId(match.id)}>Slett</button>}</div>
             </li>)}</ul> : <p className="saved-history-empty">Ingen kamper passer til søket.</p>}
           </section>}
           <div className="setup-stamp" aria-hidden="true">NORSK<br />DART<br /><b>501</b></div>

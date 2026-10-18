@@ -168,6 +168,11 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .history-match-actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
 .history-details-button { min-height: 30px; padding: 0 9px; border: 1px solid var(--green); background: transparent; color: var(--green); font-size: 11px; font-weight: 700; cursor: pointer; }
 .history-details-button:hover { background: var(--green); color: white; }
+.history-delete-button, .history-delete-cancel, .history-delete-confirm { min-height: 30px; padding: 0 9px; border: 1px solid #b24029; background: transparent; color: #b24029; font-size: 11px; font-weight: 700; cursor: pointer; }
+.history-delete-button:hover, .history-delete-cancel:hover { background: #b2402910; }
+.history-delete-confirm { background: #b24029; color: white; }
+.history-delete-confirm:hover { background: #96331f; }
+.history-delete-prompt { color: #b24029; font-size: 11px; font-weight: 700; }
 .reopen-match-button { grid-column: 2; justify-self: start; min-height: 30px; padding: 0 9px; border: 1px solid var(--line); background: transparent; color: var(--green); font-size: 11px; font-weight: 700; cursor: pointer; }
 .reopen-match-button:hover { border-color: var(--green); background: #175c4510; }
 .history-match-actions .reopen-match-button { grid-column: auto; }
