@@ -73,6 +73,8 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .count-option { min-height: 39px; border: 1px solid var(--line); background: transparent; cursor: pointer; transition: color 140ms, background 140ms, border-color 140ms; }
 .count-option:hover { border-color: var(--green); }
 .count-option.selected { border-color: var(--green); background: var(--green); color: white; }
+.count-option:disabled { cursor: not-allowed; opacity: .45; }
+.team-mode-toggle { min-height: 37px; margin: -5px 0 16px; font-size: 11px; }
 .match-format { margin: 0 0 18px; padding: 0; border: 0; }
 .match-format legend { margin-bottom: 9px; color: var(--muted); font: 10px var(--mono); font-weight: 700; letter-spacing: 1.1px; }
 .format-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
@@ -178,6 +180,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .player-name-wrap { min-width: 0; gap: 10px; }
 .player-number { color: var(--orange); }
 .player-name-wrap h2 { overflow: hidden; margin: 0; font-size: 14px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.player-team-tag { flex: none; color: var(--orange); font: 9px var(--mono); }
 .turn-tag, .winner-tag { display: flex; align-items: center; gap: 7px; color: var(--green); font-size: 9px; }
 .winner-tag { color: var(--orange); }
 .score-display { margin: 20px 0 16px; font-family: var(--mono); font-size: 76px; font-weight: 500; line-height: 1; font-variant-numeric: tabular-nums; }

@@ -10,6 +10,7 @@ export type VisitForStats = {
 
 export type PlayerMatchStats = {
   name: string
+  teamId?: 'A' | 'B'
   score: number
   legsWon: number
   average3: number
@@ -25,6 +26,7 @@ export type PlayerMatchStats = {
 type PlayerForStats = {
   id: string
   name: string
+  teamId?: 'A' | 'B'
   score: number
   visits: VisitForStats[]
 }
@@ -45,6 +47,7 @@ export function summarizePlayer(player: PlayerForStats, legsWon: number): Player
 
   return {
     name: player.name,
+    ...(player.teamId ? { teamId: player.teamId } : {}),
     score: player.score,
     legsWon,
     average3: dartsThrown > 0 ? (pointsScored / dartsThrown) * 3 : 0,

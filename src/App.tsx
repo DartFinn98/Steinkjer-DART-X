@@ -13,7 +13,7 @@ type DartInputs = [string, string, string]
 type ScoredDart = { points: number; isDouble: boolean; target: number | null; marks: number }
 type GameMode = '501' | 'cricket' | '121'
 type Visit = { darts: [number, number, number] | null; total: number; bust: boolean; checkout: boolean; dartsThrown: number; legNumber: number; cricketDarts?: CricketDart[] }
-type Player = { id: string; name: string; score: number; visits: Visit[]; cricketMarks?: CricketMarks; scoreCorrected?: boolean }
+type Player = { id: string; name: string; score: number; visits: Visit[]; teamId?: 'A' | 'B'; cricketMarks?: CricketMarks; scoreCorrected?: boolean }
 type Snapshot = { players: Player[]; activePlayer: number; winnerId: string | null; legsWon: Record<string, number>; matchWinnerId: string | null }
 type EntryMode = 'darts' | 'total'
 type GamePhase = 'setup' | 'bull-off' | 'leg-bull-off' | 'playing'
@@ -103,9 +103,24 @@ function countCricketMarks(visits: Visit[]): CricketMarks {
   return marks
 }
 
+function formatSavedMatchPlayers(match: SavedData['matches'][number]): string {
+  if (match.players.some((player) => player.teamId)) {
+    return (['A', 'B'] as const).map((teamId) => {
+      const members = match.players.filter((player) => player.teamId === teamId)
+      if (members.length === 0) return null
+      const wins = Math.max(0, ...members.map((player) => player.legsWon ?? 0))
+      return `Lag ${teamId} (${members.map((player) => player.name).join(' + ')}): ${wins} ${wins === 1 ? 'legg' : 'legger'}`
+    }).filter(Boolean).join(' · ')
+  }
+  return match.players.map((player) => player.legsWon === undefined
+    ? `${player.name}: ${player.score} poeng`
+    : `${player.name}: ${player.legsWon} ${match.gameMode === '121' ? player.legsWon === 1 ? 'runde' : 'runder' : player.legsWon === 1 ? 'legg' : 'legger'}`).join(' · ')
+}
+
 function App() {
   const [playerCount, setPlayerCount] = useState(2)
   const [gameMode, setGameMode] = useState<GameMode>('501')
+  const [teamMode, setTeamMode] = useState(false)
   const [bestOfLegs, setBestOfLegs] = useState<3 | 5 | 7>(3)
   const [playerNames, setPlayerNames] = useState<string[]>(['', ''])
   const [newRosterName, setNewRosterName] = useState('')
@@ -228,9 +243,16 @@ function App() {
 
   const currentPlayer = players[activePlayer]
   const winner = players.find((player) => player.id === winnerId)
+  const winnerDisplayName = winner ? teamDisplayName(players, winner) : ''
+  const scorePlayers = teamMode
+    ? players.filter((player, index) => players.findIndex((candidate) => candidate.teamId === player.teamId) === index)
+    : players
   const scoreEditPlayer = players.find((player) => player.id === scoreEditPlayerId)
   const legsToWin = Math.ceil(bestOfLegs / 2)
-  const legNumber = Object.values(legsWon).reduce((total, count) => total + count, 0) + 1
+  const legScorePlayers = teamMode
+    ? players.filter((player, index) => players.findIndex((candidate) => candidate.teamId === player.teamId) === index)
+    : players
+  const legNumber = legScorePlayers.reduce((total, player) => total + (legsWon[player.id] ?? 0), 0) + 1
   const roundWord = gameMode === '121' ? 'RUNDE' : 'LEGG'
   const roundWordLower = gameMode === '121' ? 'runde' : 'legg'
   const roundWordPlural = gameMode === '121' ? 'runder' : 'legger'
@@ -239,6 +261,15 @@ function App() {
   const bullThrowOrder = players.length > 0 && coinStarterIndex !== null
     ? players.map((_, offset) => players[(coinStarterIndex + offset) % players.length])
     : players
+
+  function teamMembers(roster: Player[], player: Player): Player[] {
+    return player.teamId ? roster.filter((member) => member.teamId === player.teamId) : [player]
+  }
+
+  function teamDisplayName(roster: Player[], player: Player): string {
+    const members = teamMembers(roster, player)
+    return members.length > 1 ? members.map((member) => member.name).join(' + ') : player.name
+  }
 
   function selectGameMode(mode: GameMode) {
     cancelCoinFlip()
@@ -258,8 +289,9 @@ function App() {
     const roster = names.map((name, index) => ({
       id: `${Date.now()}-${index}`,
       name: name.trim() || `Spiller ${index + 1}`,
-      score: gameMode === '121' ? 121 : 0,
+      score: gameMode === '121' ? 121 : gameMode === '501' ? 501 : 0,
       visits: [],
+      ...(teamMode ? { teamId: index % 2 === 0 ? 'A' as const : 'B' as const } : {}),
       ...(gameMode === 'cricket' ? { cricketMarks: Object.fromEntries(CRICKET_TARGETS.map((target) => [target, 0])) } : {}),
     }))
     setPlayers(roster)
@@ -394,9 +426,11 @@ function App() {
   }
 
   function finishLeg(legWinnerId: string, completedPlayers: Player[], finishMethod: 'checkout' | 'bull-off') {
-    const nextLegsWon = { ...legsWon, [legWinnerId]: (legsWon[legWinnerId] ?? 0) + 1 }
-    const isMatchWon = nextLegsWon[legWinnerId] >= legsToWin
     const legWinner = completedPlayers.find((player) => player.id === legWinnerId)
+    const winningPlayers = legWinner ? teamMembers(completedPlayers, legWinner) : []
+    const nextLegsWon = { ...legsWon }
+    for (const player of winningPlayers) nextLegsWon[player.id] = (nextLegsWon[player.id] ?? 0) + 1
+    const isMatchWon = nextLegsWon[legWinnerId] >= legsToWin
     setPlayers(completedPlayers)
     setLegsWon(nextLegsWon)
     setWinnerId(legWinnerId)
@@ -407,7 +441,7 @@ function App() {
       const match = {
         id: reopenedMatchId ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         playedAt: new Date().toISOString(),
-        winnerName: legWinner.name,
+        winnerName: teamMode && legWinner ? teamDisplayName(completedPlayers, legWinner) : legWinner?.name ?? '',
         gameMode,
         bestOfLegs,
         finishMethod,
@@ -485,7 +519,9 @@ function App() {
     }
 
     if (gameMode === 'cricket' && cricketDarts) {
-      const opponents = players.filter((player) => player.id !== currentPlayer.id)
+      const opponents = players.filter((player) => teamMode
+        ? player.teamId !== currentPlayer.teamId
+        : player.id !== currentPlayer.id)
       const result = applyCricketVisit(
         currentPlayer.cricketMarks ?? {},
         opponents.map((player) => player.cricketMarks ?? {}),
@@ -494,9 +530,13 @@ function App() {
       )
       const cricketWinner = hasWonCricket(result.marks, result.score, opponents.map((player) => player.score))
       const visitPoints = result.score - currentPlayer.score
-      const nextPlayers = players.map((player) => player.id === currentPlayer.id
-        ? { ...player, score: result.score, cricketMarks: result.marks, visits: [...player.visits, { darts: scores, total: visitPoints, bust: false, checkout: cricketWinner, dartsThrown, legNumber, cricketDarts }] }
-        : player)
+      const nextPlayers = players.map((player) => {
+        const isCurrentPlayer = player.id === currentPlayer.id
+        const sharesTeam = teamMode && player.teamId === currentPlayer.teamId
+        return isCurrentPlayer || sharesTeam
+          ? { ...player, score: result.score, cricketMarks: result.marks, visits: isCurrentPlayer ? [...player.visits, { darts: scores, total: visitPoints, bust: false, checkout: cricketWinner, dartsThrown, legNumber, cricketDarts }] : player.visits }
+          : player
+      })
 
       setHistory((items) => [...items, { players, activePlayer, winnerId, legsWon, matchWinnerId }])
       setPlayers(nextPlayers)
@@ -512,9 +552,13 @@ function App() {
     const remaining = currentPlayer.score - total
     const checkout = remaining === 0 && lastDartIsDouble
     const bust = remaining < 0 || remaining === 1 || (remaining === 0 && !lastDartIsDouble)
-    const nextPlayers = players.map((player, index) => index === activePlayer
-      ? { ...player, score: bust ? player.score : remaining, visits: [...player.visits, { darts: scores, total, bust, checkout, dartsThrown, legNumber }] }
-      : player)
+    const nextPlayers = players.map((player, index) => {
+      const isCurrentPlayer = index === activePlayer
+      const sharesTeam = teamMode && player.teamId === currentPlayer.teamId
+      return isCurrentPlayer || sharesTeam
+        ? { ...player, score: bust ? currentPlayer.score : remaining, visits: isCurrentPlayer ? [...player.visits, { darts: scores, total, bust, checkout, dartsThrown, legNumber }] : player.visits }
+        : player
+    })
 
     setHistory((items) => [...items, { players, activePlayer, winnerId, legsWon, matchWinnerId }])
     setPlayers(nextPlayers)
@@ -570,7 +614,7 @@ function App() {
     const nextStarter = (legStarterIndex + 1) % players.length
     setPlayers(players.map((player) => ({
       ...player,
-      score: gameMode === '121' ? 121 : 0,
+      score: gameMode === '121' ? 121 : gameMode === '501' ? 501 : 0,
       ...(gameMode === 'cricket' ? { cricketMarks: Object.fromEntries(CRICKET_TARGETS.map((target) => [target, 0])) } : {}),
       scoreCorrected: false,
     })))
@@ -592,35 +636,58 @@ function App() {
   function reopenSavedMatch(match: SavedData['matches'][number]) {
     if (!match.finishMethod || match.players.length === 0) return
     const isCricket = match.gameMode === 'cricket'
-    const reopenedPlayers = match.players.map((savedPlayer) => ({
-      id: savedPlayer.name.trim().toLowerCase(),
-      name: savedPlayer.name,
-      score: savedPlayer.score,
-      visits: savedPlayer.visits.map((visit) => ({ ...visit })),
-      ...(isCricket ? { cricketMarks: countCricketMarks(savedPlayer.visits) } : {}),
-      scoreCorrected: false,
-    }))
-    const matchWinnerIndex = reopenedPlayers.findIndex((player) => player.name === match.winnerName)
+    const reopenedPlayers = match.players.map((savedPlayer) => {
+      const marksVisits = savedPlayer.teamId
+        ? match.players.filter((player) => player.teamId === savedPlayer.teamId).flatMap((player) => player.visits)
+        : savedPlayer.visits
+      return {
+        id: savedPlayer.name.trim().toLowerCase(),
+        name: savedPlayer.name,
+        score: savedPlayer.score,
+        visits: savedPlayer.visits.map((visit) => ({ ...visit })),
+        ...(savedPlayer.teamId ? { teamId: savedPlayer.teamId } : {}),
+        ...(isCricket ? { cricketMarks: countCricketMarks(marksVisits) } : {}),
+        scoreCorrected: false,
+      }
+    })
+    const reopenedTeamMode = reopenedPlayers.some((player) => player.teamId !== undefined)
+    const matchWinnerIndex = reopenedPlayers.findIndex((player) => reopenedTeamMode
+      ? teamDisplayName(reopenedPlayers, player) === match.winnerName
+      : player.name === match.winnerName)
     if (matchWinnerIndex < 0) return
+    const matchWinnerTeamId = reopenedPlayers[matchWinnerIndex].teamId
+    const decidingPlayerIndex = match.finishMethod === 'checkout'
+      ? reopenedPlayers.findIndex((player) => (!reopenedTeamMode || player.teamId === matchWinnerTeamId) && player.visits.at(-1)?.checkout)
+      : matchWinnerIndex
+    if (decidingPlayerIndex < 0) return
 
     let restoredPlayers = reopenedPlayers
     if (match.finishMethod === 'checkout') {
-      const finalVisit = reopenedPlayers[matchWinnerIndex].visits.at(-1)
+      const finalVisit = reopenedPlayers[decidingPlayerIndex].visits.at(-1)
       if (!finalVisit?.checkout) return
-      restoredPlayers = reopenedPlayers.map((player, index) => index === matchWinnerIndex
-        ? {
+      const winningTeamPlayers = reopenedTeamMode
+        ? reopenedPlayers.filter((player) => player.teamId === matchWinnerTeamId)
+        : [reopenedPlayers[matchWinnerIndex]]
+      const restoredCricketMarks = countCricketMarks(winningTeamPlayers.flatMap((player) => (
+        player.id === reopenedPlayers[decidingPlayerIndex].id ? player.visits.slice(0, -1) : player.visits
+      )))
+      restoredPlayers = reopenedPlayers.map((player, index) => {
+        const isWinningTeamMember = index === matchWinnerIndex || (reopenedTeamMode && player.teamId === matchWinnerTeamId)
+        return isWinningTeamMember
+          ? {
           ...player,
           score: isCricket ? Math.max(0, player.score - finalVisit.total) : finalVisit.total,
-          visits: player.visits.slice(0, -1),
-          ...(isCricket ? { cricketMarks: countCricketMarks(player.visits.slice(0, -1)) } : {}),
+            visits: index === decidingPlayerIndex ? player.visits.slice(0, -1) : player.visits,
+          ...(isCricket ? { cricketMarks: restoredCricketMarks } : {}),
         }
-        : player)
+        : player
+      })
     }
 
     const winnerId = reopenedPlayers[matchWinnerIndex].id
     const restoredLegs = Object.fromEntries(reopenedPlayers.map((player) => [
       player.id,
-      Math.max(0, (match.players.find((savedPlayer) => savedPlayer.name === player.name)?.legsWon ?? 0) - (player.id === winnerId ? 1 : 0)),
+      Math.max(0, (match.players.find((savedPlayer) => savedPlayer.name === player.name)?.legsWon ?? 0) - (player.id === winnerId || (reopenedTeamMode && player.teamId === matchWinnerTeamId) ? 1 : 0)),
     ]))
     const savedStarterIndex = match.legStarterName
       ? restoredPlayers.findIndex((player) => player.name === match.legStarterName)
@@ -628,12 +695,13 @@ function App() {
     const starterIndex = savedStarterIndex >= 0 ? savedStarterIndex : matchWinnerIndex
 
     setPlayerCount(restoredPlayers.length)
+    setTeamMode(reopenedTeamMode)
     setGameMode(match.gameMode ?? '501')
     setPlayerNames(restoredPlayers.map((player) => player.name))
     setPlayers(restoredPlayers)
     setLegsWon(restoredLegs)
     setBestOfLegs(match.bestOfLegs ?? 3)
-    setActivePlayer(matchWinnerIndex)
+    setActivePlayer(decidingPlayerIndex)
     setLegStarterIndex(starterIndex)
     setMatchWinnerId(null)
     setWinnerId(null)
@@ -684,7 +752,7 @@ function App() {
     }
 
     setHistory((items) => [...items, { players, activePlayer, winnerId, legsWon, matchWinnerId }])
-    const correctedPlayers = players.map((item) => item.id === player.id
+    const correctedPlayers = players.map((item) => item.id === player.id || (teamMode && item.teamId === player.teamId)
       ? { ...item, score: correctedScore, scoreCorrected: true }
       : item)
     closeScoreEditor()
@@ -767,8 +835,9 @@ function App() {
             <div className="panel-heading"><div><p className="eyebrow">NY KAMP</p><h2>Hvem spiller?</h2></div><span className="panel-index">01 — 02</span></div>
             <fieldset className="player-count">
               <legend>ANTALL SPILLERE</legend>
-              <div className="count-options">{[1, 2, 3, 4].filter((count) => gameMode !== 'cricket' || count > 1).map((count) => <button key={count} type="button" aria-pressed={playerCount === count} className={playerCount === count ? 'count-option selected' : 'count-option'} onClick={() => { cancelCoinFlip(); setPlayerCount(count); setRosterSlot((slot) => Math.min(slot, count - 1)); setCoinResult(null); setCoinStarterIndex(null) }}>{count}</button>)}</div>
+              <div className="count-options">{[1, 2, 3, 4].filter((count) => gameMode !== 'cricket' || count > 1).map((count) => <button key={count} type="button" disabled={teamMode && count !== 4} aria-pressed={playerCount === count} className={playerCount === count ? 'count-option selected' : 'count-option'} onClick={() => { cancelCoinFlip(); setPlayerCount(count); setRosterSlot((slot) => Math.min(slot, count - 1)); setCoinResult(null); setCoinStarterIndex(null) }}>{count}</button>)}</div>
             </fieldset>
+            <label className="manual-double-toggle team-mode-toggle"><input type="checkbox" checked={teamMode} onChange={(event) => { const enabled = event.target.checked; cancelCoinFlip(); setTeamMode(enabled); if (enabled) { setPlayerCount(4); setPlayerNames((current) => Array.from({ length: 4 }, (_, index) => current[index] ?? '')) } setRosterSlot((slot) => Math.min(slot, enabled ? 3 : playerCount - 1)); setCoinResult(null); setCoinStarterIndex(null) }} /><span className="custom-check" aria-hidden="true" />Spill dobler · 2 mot 2</label>
             <fieldset className="match-format game-mode-format">
               <legend>SPILLTYPE</legend>
               <div className="game-mode-options">{([{ id: '501', label: '501' }, { id: 'cricket', label: 'Cricket' }, { id: '121', label: '121 utgang' }] as const).map((mode) => <button key={mode.id} type="button" aria-pressed={gameMode === mode.id} className={gameMode === mode.id ? 'format-option selected' : 'format-option'} onClick={() => selectGameMode(mode.id)}>{mode.label}</button>)}</div>
@@ -781,20 +850,20 @@ function App() {
             </fieldset>
             <div className="name-fields">{names.map((name, index) => (
               <label className="name-field" key={index}>
-                <span>SPILLER {String(index + 1).padStart(2, '0')}</span>
-                <input autoComplete="off" maxLength={24} placeholder={`Spiller ${index + 1}`} value={name} onChange={(event) => { cancelCoinFlip(); setPlayerNames((items) => { const next = [...items]; next[index] = event.target.value; return next }); setCoinResult(null); setCoinStarterIndex(null) }} />
+                <span>{teamMode ? `LAG ${index % 2 === 0 ? 'A' : 'B'} · SPILLER ${Math.floor(index / 2) + 1}` : `SPILLER ${String(index + 1).padStart(2, '0')}`}</span>
+                <input autoComplete="off" maxLength={24} placeholder={teamMode ? `Lag ${index % 2 === 0 ? 'A' : 'B'} spiller ${Math.floor(index / 2) + 1}` : `Spiller ${index + 1}`} value={name} onChange={(event) => { cancelCoinFlip(); setPlayerNames((items) => { const next = [...items]; next[index] = event.target.value; return next }); setCoinResult(null); setCoinStarterIndex(null) }} />
               </label>
             ))}</div>
             <section className="player-library" aria-label="Spillerliste">
               <div className="player-library-heading"><div><p className="eyebrow">SPILLERLISTE</p><span>Legg til og velg spillere for kampen.</span></div><span className="player-library-count">{savedData.players.length}</span></div>
               <div className="add-roster-player"><input aria-label="Nytt spillernavn" autoComplete="off" maxLength={24} placeholder="Nytt spillernavn" value={newRosterName} onChange={(event) => setNewRosterName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addRosterPlayer() } }} /><button type="button" disabled={!newRosterName.trim()} onClick={addRosterPlayer}>Legg til</button></div>
               {savedData.players.length > 0 ? <>
-                <label className="roster-slot-picker"><span>VELG SPILLERFELT</span><select value={rosterSlot} onChange={(event) => setRosterSlot(Number(event.target.value))}>{names.map((_, index) => <option key={index} value={index}>Spiller {index + 1}</option>)}</select></label>
+                <label className="roster-slot-picker"><span>VELG SPILLERFELT</span><select value={rosterSlot} onChange={(event) => setRosterSlot(Number(event.target.value))}>{names.map((_, index) => <option key={index} value={index}>{teamMode ? `Lag ${index % 2 === 0 ? 'A' : 'B'} · Spiller ${Math.floor(index / 2) + 1}` : `Spiller ${index + 1}`}</option>)}</select></label>
                 <ul className="player-library-list">{savedData.players.map((player) => {
                   const confirmDelete = playerPendingDeleteId === player.id
                   return <li key={player.id}>
                     <span className="player-library-name">{confirmDelete ? `Slette ${player.name}?` : player.name}</span>
-                    {confirmDelete ? <div className="player-library-actions"><button className="player-delete-confirm" type="button" onClick={() => void removeRosterPlayer(player.id)}>Ja, slett</button><button type="button" onClick={() => setPlayerPendingDeleteId(null)}>Avbryt</button></div> : <div className="player-library-actions"><button type="button" onClick={() => selectRosterPlayer(player.name)} aria-label={`Velg ${player.name} som spiller ${rosterSlot + 1}`}>Velg</button><button className="player-library-delete" type="button" aria-label={`Slett ${player.name}`} onClick={() => setPlayerPendingDeleteId(player.id)}>Slett</button></div>}
+                    {confirmDelete ? <div className="player-library-actions"><button className="player-delete-confirm" type="button" onClick={() => void removeRosterPlayer(player.id)}>Ja, slett</button><button type="button" onClick={() => setPlayerPendingDeleteId(null)}>Avbryt</button></div> : <div className="player-library-actions"><button type="button" onClick={() => selectRosterPlayer(player.name)} aria-label={`Velg ${player.name} som ${teamMode ? `lag ${rosterSlot % 2 === 0 ? 'A' : 'B'} spiller ${Math.floor(rosterSlot / 2) + 1}` : `spiller ${rosterSlot + 1}`}`}>Velg</button><button className="player-library-delete" type="button" aria-label={`Slett ${player.name}`} onClick={() => setPlayerPendingDeleteId(player.id)}>Slett</button></div>}
                   </li>
                 })}</ul>
               </> : <p className="player-library-empty">Spillerlisten er tom. Legg til et navn for å begynne.</p>}
@@ -812,7 +881,7 @@ function App() {
             <ul>{savedData.matches.slice(0, 5).map((match) => <li key={match.id}>
               <time dateTime={match.playedAt}>{new Intl.DateTimeFormat('nb-NO', { dateStyle: 'medium' }).format(new Date(match.playedAt))}</time>
               <strong>{match.winnerName} vant</strong>
-              <span>{match.gameMode && match.gameMode !== '501' ? `${match.gameMode === '121' ? '121 utgang' : 'Cricket'} · ` : ''}{match.players.map((player) => player.legsWon === undefined ? `${player.name}: ${player.score} poeng` : `${player.name}: ${player.legsWon} ${match.gameMode === '121' ? player.legsWon === 1 ? 'runde' : 'runder' : player.legsWon === 1 ? 'legg' : 'legger'}`).join(' · ')}{match.bestOfLegs ? ` · Best av ${match.bestOfLegs}` : ''}</span>
+              <span>{match.gameMode && match.gameMode !== '501' ? `${match.gameMode === '121' ? '121 utgang' : 'Cricket'} · ` : ''}{formatSavedMatchPlayers(match)}{match.bestOfLegs ? ` · Best av ${match.bestOfLegs}` : ''}</span>
               {match.finishMethod && <button className="reopen-match-button" type="button" onClick={() => reopenSavedMatch(match)}>Åpne kampen igjen</button>}
             </li>)}</ul>
           </section>}
@@ -869,16 +938,20 @@ function App() {
               const visibleLeg = winnerId ? legNumber - 1 : legNumber
               const legVisits = player.visits.filter((visit) => visit.legNumber === visibleLeg)
               const lastVisit = legVisits.at(-1)
-              const stats = summarizePlayer(player, legsWon[player.id] ?? 0)
+              const playerLegsWon = teamMode
+                ? Math.max(0, ...teamMembers(players, player).map((member) => legsWon[member.id] ?? 0))
+                : legsWon[player.id] ?? 0
+              const isTeamWinner = Boolean(teamMode && winner && player.teamId === winner.teamId)
+              const stats = summarizePlayer(player, playerLegsWon)
               return (
-                <article className={`player-card${isActive ? ' is-active' : ''}${player.id === winnerId ? ' is-winner' : ''}`} key={player.id}>
-                  <div className="player-card-top"><div className="player-name-wrap"><span className="player-number">{String(index + 1).padStart(2, '0')}</span><h2>{player.name}</h2></div>{isActive && <span className="turn-tag"><span className="live-dot" /> DIN TUR</span>}{player.id === winnerId && <span className="winner-tag">{roundWord}VINNER</span>}</div>
+                <article className={`player-card${isActive ? ' is-active' : ''}${player.id === winnerId || isTeamWinner ? ' is-winner' : ''}`} key={player.id}>
+                  <div className="player-card-top"><div className="player-name-wrap"><span className="player-number">{String(index + 1).padStart(2, '0')}</span><h2>{player.name}</h2>{player.teamId && <span className="player-team-tag">LAG {player.teamId}</span>}</div>{isActive && <span className="turn-tag"><span className="live-dot" /> DIN TUR</span>}{(player.id === winnerId || isTeamWinner) && <span className="winner-tag">{teamMode ? 'LAGSEIER' : `${roundWord}VINNER`}</span>}</div>
                   {gameMode === 'cricket' ? <div className="score-display cricket-score" aria-label={`${player.score} poeng`}>{player.score}<span>POENG</span></div> : <button className="score-display score-edit-button" type="button" disabled={winnerId !== null} aria-label={`Rett poengsummen til ${player.score} for ${player.name}`} onClick={() => editPlayerScore(player)}>{player.score}<span className="score-edit-cue">{player.scoreCorrected ? 'POENGSUM RETTET' : 'TRYKK PÅ POENGSUMMEN FOR Å RETTE'}</span></button>}
                   {gameMode === 'cricket' && <div className="cricket-mark-board" aria-label={`Cricket-felt for ${player.name}`}>{CRICKET_TARGETS.map((target) => {
                     const marks = player.cricketMarks?.[target] ?? 0
                     return <div className="cricket-mark" key={target} aria-label={`${target === 25 ? 'Bull' : target}: ${marks} av 3 treff`}><strong>{target === 25 ? 'BULL' : target}</strong><span>{[0, 1, 2].map((mark) => <i key={mark} className={mark < marks ? 'marked' : ''} />)}</span></div>
                   })}</div>}
-                  <div className="legs-progress" aria-label={`${legsWon[player.id] ?? 0} av ${legsToWin} ${roundWordPlural}`}><div>{Array.from({ length: legsToWin }, (_, legIndex) => <span key={legIndex} className={legIndex < (legsWon[player.id] ?? 0) ? 'leg-pip earned' : 'leg-pip'} />)}</div><span>{legsWon[player.id] ?? 0} / {legsToWin} {roundWordPlural.toUpperCase()}</span></div>
+                  <div className="legs-progress" aria-label={`${playerLegsWon} av ${legsToWin} ${roundWordPlural}`}><div>{Array.from({ length: legsToWin }, (_, legIndex) => <span key={legIndex} className={legIndex < playerLegsWon ? 'leg-pip earned' : 'leg-pip'} />)}</div><span>{playerLegsWon} / {legsToWin} {roundWordPlural.toUpperCase()}</span></div>
                   {gameMode !== 'cricket' && <div className={`player-stats${gameMode === '501' ? ' has-fastest-checkout' : ''}`} aria-label={`3-pilssnitt ${stats.average3.toFixed(1)}, ${stats.tons} 100-plussrunder, ${stats.oneEighties} 180-ere${gameMode === '501' ? `, raskeste 501-utgang ${stats.fastestCheckoutDarts === null ? 'ikke registrert' : `${stats.fastestCheckoutDarts} piler`}` : ''}`}><div><strong>{stats.average3.toFixed(1)}</strong><span>3-PILSSNITT</span></div><div><strong>{stats.tons}</strong><span>100+</span></div><div><strong>{stats.oneEighties}</strong><span>180</span></div><div><strong>{stats.highestVisit}</strong><span>HØYESTE</span></div>{gameMode === '501' && <div><strong>{stats.fastestCheckoutDarts ?? '—'}</strong><span title="Færrest piler brukt på en 501-legg">RASK 501</span></div>}</div>}
                   <div className="player-card-bottom"><span>{legVisits.length} {legVisits.length === 1 ? 'TUR' : 'TURER'} I {roundWord}</span>{player.scoreCorrected ? <span className="last-visit">POENGSUM RETTET</span> : lastVisit && <span className={lastVisit.bust ? 'last-visit bust-label' : 'last-visit'}>{lastVisit.bust ? 'SISTE TUR: BUST' : lastVisit.checkout ? 'UTGANG' : `SISTE TUR: ${lastVisit.total}`}</span>}</div>
                 </article>
@@ -886,7 +959,7 @@ function App() {
             })}
           </div>
           {winner ? (
-            <div className="winner-banner" role="status"><div><p className="eyebrow">{matchWinnerId ? 'KAMPEN ER AVGJORT' : `${roundWord} ${legNumber - 1} ER FERDIG`}</p><h2>{matchWinnerId ? `${winner.name} vant kampen.` : `${winner.name} vant ${roundWordLower}en.`}</h2><p className="match-scoreline">{players.map((player) => `${player.name} ${legsWon[player.id] ?? 0}`).join('  ·  ')} <span>BEST AV {bestOfLegs}</span></p>{matchWinnerId && emailReportMessage && <p className="email-report-status" role="status">{emailReportMessage}</p>}</div><button className="primary-button" type="button" onClick={matchWinnerId ? newGame : startNextLeg}>{matchWinnerId ? 'Ny kamp' : `Neste ${roundWordLower}`} <span aria-hidden="true">↗</span></button></div>
+            <div className="winner-banner" role="status"><div><p className="eyebrow">{matchWinnerId ? 'KAMPEN ER AVGJORT' : `${roundWord} ${legNumber - 1} ER FERDIG`}</p><h2>{matchWinnerId ? `${winnerDisplayName} vant kampen.` : `${winnerDisplayName} vant ${roundWordLower}en.`}</h2><p className="match-scoreline">{scorePlayers.map((player) => `${teamMode ? `Lag ${player.teamId} (${teamMembers(players, player).map((member) => member.name).join(' + ')})` : player.name} ${legsWon[player.id] ?? 0}`).join('  ·  ')} <span>BEST AV {bestOfLegs}</span></p>{matchWinnerId && emailReportMessage && <p className="email-report-status" role="status">{emailReportMessage}</p>}</div><button className="primary-button" type="button" onClick={matchWinnerId ? newGame : startNextLeg}>{matchWinnerId ? 'Ny kamp' : `Neste ${roundWordLower}`} <span aria-hidden="true">↗</span></button></div>
           ) : (
             <form className="score-entry" onSubmit={recordVisit}>
               <div className="entry-title"><div><p className="eyebrow">{gameMode === 'cricket' ? 'REGISTRER TREFF' : 'REGISTRER POENG'}</p><h2>{currentPlayer?.name}<span> sin tur</span></h2></div><span className="dart-counter">{entryMode === 'total' && gameMode !== 'cricket' ? 'TOTALSUM' : '3 KAST'}</span></div>
