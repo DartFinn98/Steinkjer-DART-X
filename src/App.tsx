@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { getCheckoutHint } from './checkout'
-import { addTournamentCupRound, deleteAllClubTournaments, deleteClubSignup, deleteClubTournament, deleteSavedMatch, deleteSavedPlayer, finishTournamentMatch, loadClubAdminStatus, loadClubAdmins, loadClubSignups, loadClubTournaments, loadLinkedPlayerProfile, loadSavedData, saveClubSignup, saveClubTournament, saveFinishedMatch, saveLinkedPlayerId, savePlayers, saveTournamentMatchProgress, sendMatchReport, setClubAdminRole, syncPendingChanges, updateClubSignup, uploadProfileAvatar } from './database'
+import { addTournamentCupRound, beginGuestSession, deleteAllClubTournaments, deleteClubSignup, deleteClubTournament, deleteSavedMatch, deleteSavedPlayer, endGuestSession, finishTournamentMatch, getGuestDisplayName, loadClubAdminStatus, loadClubAdmins, loadClubSignups, loadClubTournaments, loadLinkedPlayerProfile, loadSavedData, saveClubSignup, saveClubTournament, saveFinishedMatch, saveLinkedPlayerId, savePlayers, saveTournamentMatchProgress, sendMatchReport, setClubAdminRole, syncPendingChanges, updateClubSignup, uploadProfileAvatar } from './database'
 import type { ClubAdmin, ClubSignup, ClubTournament, SavedData, TournamentGameHistory, TournamentMatch, TournamentMatchProgress, TournamentGamePlayer } from './database'
 import { supabase } from './supabase'
 import type { Session } from '@supabase/supabase-js'
@@ -554,10 +554,12 @@ function App() {
   const [savedData, setSavedData] = useState<SavedData>({ players: [], matches: [] })
   const [databaseMessage, setDatabaseMessage] = useState('')
   const [session, setSession] = useState<Session | null>(null)
+  const [guestName, setGuestName] = useState<string | null>(null)
   const [authLoading, setAuthLoading] = useState(Boolean(supabase))
   const [authMode, setAuthMode] = useState<'login' | 'signup' | 'reset' | 'update-password'>('login')
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
+  const [guestNameInput, setGuestNameInput] = useState('')
   const [authMessage, setAuthMessage] = useState('')
   const [authBusy, setAuthBusy] = useState(false)
   const [emailReportMessage, setEmailReportMessage] = useState('')
@@ -648,6 +650,11 @@ function App() {
   useEffect(() => {
     if (!supabase) return
     let mounted = true
+    try {
+      setGuestName(getGuestDisplayName())
+    } catch (error) {
+      setAuthMessage(error instanceof Error ? error.message : 'Gjesteøkten kunne ikke leses.')
+    }
     void supabase.auth.getSession().then(({ data, error }) => {
       if (!mounted) return
       if (error) setAuthMessage('Kunne ikke kontrollere innloggingen. Prøv å laste siden på nytt.')
@@ -658,6 +665,14 @@ function App() {
       if (event === 'PASSWORD_RECOVERY') {
         setAuthMode('update-password')
         setAuthMessage('Velg et nytt passord for kontoen din.')
+      }
+      if (nextSession) {
+        try {
+          endGuestSession()
+        } catch {
+          setDatabaseMessage('Gjesteøkten kunne ikke slettes fra denne fanen.')
+        }
+        setGuestName(null)
       }
       setSession(nextSession)
       setAuthLoading(false)
@@ -685,7 +700,7 @@ function App() {
   }, [session])
 
   useEffect(() => {
-    if (supabase && !session) {
+    if (supabase && !session && !guestName) {
       setSavedData({ players: [], matches: [] })
       setPlayerNames([])
       setPlayers([])
@@ -703,7 +718,7 @@ function App() {
       if (mounted) setDatabaseMessage('Kunne ikke hente spillere og kamper. Sjekk tilkoblingen og prøv igjen.')
     })
     return () => { mounted = false }
-  }, [session])
+  }, [session, guestName])
 
   useEffect(() => {
     if (appSection !== 'profile' || !supabase || !session) return
@@ -793,8 +808,10 @@ function App() {
   useEffect(() => {
     const handleOffline = () => {
       setIsOnline(false)
-      setDatabaseMessage(supabase
-        ? 'Du er offline. Endringer lagres på enheten og synkroniseres når nettet er tilbake.'
+      setDatabaseMessage(guestName
+        ? 'Du er offline. Gjesteøkten lagres midlertidig i denne fanen.'
+        : supabase
+          ? 'Du er offline. Endringer lagres på enheten og synkroniseres når nettet er tilbake.'
         : 'Du er offline. Kampdata lagres i denne nettleseren.')
     }
 
@@ -822,7 +839,7 @@ function App() {
       window.removeEventListener('offline', handleOffline)
       window.removeEventListener('online', handleOnline)
     }
-  }, [session])
+  }, [session, guestName])
 
   const currentPlayer = players[activePlayer]
   const winner = players.find((player) => player.id === winnerId)
@@ -1027,6 +1044,38 @@ function App() {
     void supabase.auth.signOut().catch(() => setDatabaseMessage('Kunne ikke logge ut. Prøv igjen.'))
   }
 
+  function startGuest() {
+    try {
+      const displayName = beginGuestSession(guestNameInput)
+      setGuestName(displayName)
+      setGuestNameInput(displayName)
+      setPlayerNames([displayName, ''])
+      setSavedData({ players: [], matches: [] })
+      setAppSection('scoreboard')
+      newGame()
+      setAuthMessage('')
+      setDatabaseMessage('')
+      setEmailReportMessage('')
+    } catch (error) {
+      setAuthMessage(error instanceof Error ? error.message : 'Kunne ikke starte gjesteøkten. Prøv igjen.')
+    }
+  }
+
+  function exitGuest() {
+    try {
+      endGuestSession()
+      setGuestName(null)
+      setSavedData({ players: [], matches: [] })
+      setPlayerNames(['', ''])
+      setAppSection('scoreboard')
+      newGame()
+      setDatabaseMessage('')
+      setEmailReportMessage('')
+    } catch {
+      setDatabaseMessage('Gjesteøkten kunne ikke avsluttes. Prøv igjen.')
+    }
+  }
+
   function persistCurrentTournamentProgress(
     overrides: Partial<TournamentMatchProgress> = {},
     previousState: TournamentGameHistory | null = history.at(-1) ?? null,
@@ -1095,7 +1144,7 @@ function App() {
       void saveFinishedMatch(match).then(() => loadSavedData()).then(setSavedData).catch(() => {
         setDatabaseMessage('Kampen er avgjort, men resultatet kunne ikke lagres.')
       })
-      if (supabase) {
+      if (supabase && session && !guestName) {
         void sendMatchReport(match).then((delivery) => {
           setEmailReportMessage(delivery === 'sent'
             ? `Kampresultatet er sendt til ${session?.user.email ?? 'e-postadressen din'}.`
@@ -1103,7 +1152,7 @@ function App() {
         }).catch(() => {
           setEmailReportMessage('Kampen er lagret, men e-postrapporten kunne ikke sendes. Kontroller e-postoppsettet i Supabase.')
         })
-      } else {
+      } else if (!guestName) {
         setEmailReportMessage('E-postrapport krever Supabase-innlogging.')
       }
       if (activeTournamentMatch) void saveFinishedTournamentMatch(activeTournamentMatch, nextLegsWon)
@@ -1918,7 +1967,7 @@ function App() {
     return <main className="app-shell auth-shell"><div className="auth-panel"><p className="eyebrow">STEINKJER DART-X</p><h1>Innlogging er ikke konfigurert</h1><p>Appen må kobles til Supabase før den kan brukes på nett. Se README for oppsett.</p></div></main>
   }
 
-  if (supabase && (!session || authMode === 'update-password')) {
+  if (supabase && ((!session && !guestName) || authMode === 'update-password')) {
     const isPasswordReset = authMode === 'reset'
     const isPasswordUpdate = authMode === 'update-password'
     return <main className="app-shell auth-shell">
@@ -1933,6 +1982,7 @@ function App() {
           {authMessage && <p className="auth-message" role="status">{authMessage}</p>}
           <button className="primary-button auth-submit" type="submit" disabled={authBusy}>{authBusy ? 'VENT LITT …' : authMode === 'signup' ? 'Opprett konto' : isPasswordReset ? 'Send tilbakestillingslenke' : isPasswordUpdate ? 'Lagre nytt passord' : 'Logg inn'}</button>
           {authMode === 'login' && <><button className="auth-mode-toggle" type="button" onClick={() => { setAuthMode('reset'); setAuthMessage('') }}>Glemt passord?</button><button className="auth-mode-toggle" type="button" onClick={() => { setAuthMode('signup'); setAuthMessage('') }}>Ny bruker? Opprett konto</button></>}
+          {authMode === 'login' && <div className="guest-entry"><p>ELLER SPILL UTEN KONTO</p><label className="auth-field"><span>VISNINGSNAVN</span><input type="text" autoComplete="nickname" maxLength={24} value={guestNameInput} onChange={(event) => setGuestNameInput(event.target.value)} placeholder="Skriv inn et navn" /></label><button className="primary-button auth-submit" type="button" disabled={!guestNameInput.trim() || authBusy} onClick={startGuest}>Fortsett som gjest</button><small>Gjestespill lagres bare i denne fanen og slettes når du avslutter økten eller lukker fanen.</small></div>}
           {authMode === 'signup' && <button className="auth-mode-toggle" type="button" onClick={() => { setAuthMode('login'); setAuthMessage('') }}>Har du allerede konto? Logg inn</button>}
           {authMode === 'reset' && <button className="auth-mode-toggle" type="button" onClick={() => { setAuthMode('login'); setAuthMessage('') }}>Tilbake til innlogging</button>}
         </form>
@@ -1948,12 +1998,13 @@ function App() {
           <span>STEINKJER <span className="brand-dot">DART-X</span></span>
         </a>
         <div className="topbar-actions">
-          <div className="topbar-meta">{isOnline ? <span className="live-dot" /> : <span className="offline-dot" />} {isOnline ? gameMode === 'cricket' ? 'CRICKET' : `${gameMode} / DOBBEL UT` : 'OFFLINE'} <span className="court-indicator">BANE {courtNumber}</span>{!supabase && <span className="local-mode-tag">LOKAL MODUS</span>}</div>
-          <button className="club-menu-button" type="button" aria-current={appSection === 'club-evenings' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'club-evenings' ? 'scoreboard' : 'club-evenings')}>{appSection === 'club-evenings' ? 'Poengtavle' : 'Påmelding'}</button>
+          <div className="topbar-meta">{isOnline ? <span className="live-dot" /> : <span className="offline-dot" />} {isOnline ? gameMode === 'cricket' ? 'CRICKET' : `${gameMode} / DOBBEL UT` : 'OFFLINE'} <span className="court-indicator">BANE {courtNumber}</span>{(guestName || !supabase) && <span className="local-mode-tag">{guestName ? `GJEST: ${guestName}` : 'LOKAL MODUS'}</span>}</div>
+          {(!guestName || session) && <button className="club-menu-button" type="button" aria-current={appSection === 'club-evenings' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'club-evenings' ? 'scoreboard' : 'club-evenings')}>{appSection === 'club-evenings' ? 'Poengtavle' : 'Påmelding'}</button>}
           {session && <button className="club-menu-button profile-menu-button" type="button" aria-current={appSection === 'profile' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'profile' ? 'scoreboard' : 'profile')}>Min statistikk</button>}
           {session && <button className="club-menu-button profile-menu-button" type="button" aria-current={appSection === 'tournament' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'tournament' ? 'scoreboard' : 'tournament')}>Turnering</button>}
           {session && isClubAdmin && <button className="club-menu-button profile-menu-button" type="button" aria-current={appSection === 'admin' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'admin' ? 'scoreboard' : 'admin')}>Administrasjon</button>}
           {session && <button className="sign-out-button" type="button" onClick={signOut}>Logg ut</button>}
+          {guestName && <button className="sign-out-button" type="button" onClick={exitGuest}>Avslutt gjesteøkt</button>}
         </div>
       </header>
       {databaseMessage && <div className="database-message" role="status"><span>{databaseMessage}</span><button type="button" aria-label="Skjul varsel" onClick={() => setDatabaseMessage('')}>Lukk</button></div>}

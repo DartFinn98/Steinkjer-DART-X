@@ -213,6 +213,9 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .auth-submit { width: 100%; margin-top: 3px; }
 .auth-mode-toggle { min-height: 35px; padding: 0; border: 0; background: transparent; color: var(--green); font-size: 12px; text-align: left; cursor: pointer; }
 .auth-mode-toggle:hover { text-decoration: underline; }
+.guest-entry { display: grid; gap: 12px; margin-top: 4px; padding-top: 18px; border-top: 1px solid var(--line); }
+.guest-entry > p { margin: 0; color: var(--muted); font: 10px var(--mono); letter-spacing: 1px; }
+.guest-entry > small { color: var(--muted); font-size: 11px; line-height: 1.5; }
 .panel-heading { display: flex; align-items: flex-start; justify-content: space-between; padding-bottom: 19px; border-bottom: 1px solid var(--line); }
 .panel-heading .eyebrow { margin-bottom: 7px; }
 .panel-heading h2, .entry-title h2, .winner-banner h2 { margin: 0; font-family: var(--serif); font-size: 28px; font-weight: 500; }

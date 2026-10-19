@@ -123,6 +123,12 @@ const PENDING_STORE = 'pending'
 const CLUB_SIGNUP_STORE = 'club-signups'
 const PROFILE_AVATAR_BUCKET = 'profile-avatars'
 const PROFILE_AVATAR_MAX_SIZE = 2 * 1024 * 1024
+const GUEST_SESSION_KEY = 'darttavla-guest-session'
+
+type GuestSession = {
+  displayName: string
+  savedData: SavedData
+}
 
 type PendingChange =
   | { id: string; kind: 'save-players'; players: SavedPlayer[]; queuedAt: number }
@@ -139,6 +145,61 @@ type PendingPayload =
   | { kind: 'send-email'; match: SavedMatch }
 
 let pendingSequence = 0
+
+function readGuestSession(): GuestSession | null {
+  const storedSession = window.sessionStorage.getItem(GUEST_SESSION_KEY)
+  if (!storedSession) return null
+
+  let parsedSession: unknown
+  try {
+    parsedSession = JSON.parse(storedSession)
+  } catch {
+    throw new Error('Gjesteøkten kunne ikke leses. Avslutt økten og start på nytt.')
+  }
+
+  if (
+    typeof parsedSession !== 'object'
+    || parsedSession === null
+    || !('displayName' in parsedSession)
+    || typeof parsedSession.displayName !== 'string'
+    || !('savedData' in parsedSession)
+    || typeof parsedSession.savedData !== 'object'
+    || parsedSession.savedData === null
+    || !('players' in parsedSession.savedData)
+    || !Array.isArray(parsedSession.savedData.players)
+    || !('matches' in parsedSession.savedData)
+    || !Array.isArray(parsedSession.savedData.matches)
+  ) {
+    throw new Error('Gjesteøkten inneholder ugyldige data. Avslutt økten og start på nytt.')
+  }
+
+  return parsedSession as GuestSession
+}
+
+function writeGuestSession(guestSession: GuestSession): void {
+  window.sessionStorage.setItem(GUEST_SESSION_KEY, JSON.stringify(guestSession))
+}
+
+export function getGuestDisplayName(): string | null {
+  return readGuestSession()?.displayName ?? null
+}
+
+export function beginGuestSession(displayName: string): string {
+  const normalizedName = displayName.trim().replace(/\s+/g, ' ')
+  if (normalizedName.length < 1 || normalizedName.length > 24) {
+    throw new Error('Visningsnavnet må være mellom 1 og 24 tegn.')
+  }
+
+  writeGuestSession({
+    displayName: normalizedName,
+    savedData: { players: [], matches: [] },
+  })
+  return normalizedName
+}
+
+export function endGuestSession(): void {
+  window.sessionStorage.removeItem(GUEST_SESSION_KEY)
+}
 
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -263,6 +324,13 @@ async function removePendingChange(id: string): Promise<void> {
 }
 
 export async function loadSavedData(): Promise<SavedData> {
+  const guestSession = readGuestSession()
+  if (guestSession) {
+    return {
+      players: [...guestSession.savedData.players].sort((first, second) => second.lastPlayedAt.localeCompare(first.lastPlayedAt) || first.name.localeCompare(second.name, 'nb')),
+      matches: [...guestSession.savedData.matches].sort((first, second) => second.playedAt.localeCompare(first.playedAt)),
+    }
+  }
   if (!supabase || !navigator.onLine) return loadLocalSavedData()
 
   try {
@@ -657,6 +725,17 @@ export async function uploadProfileAvatar(userId: string, file: File): Promise<s
 export async function savePlayers(names: string[]): Promise<void> {
   const playedAt = new Date().toISOString()
   const records = names.map((value) => value.trim()).filter(Boolean).map((name) => playerRecord(name, playedAt))
+  const guestSession = readGuestSession()
+  if (guestSession) {
+    const players = new Map(guestSession.savedData.players.map((player) => [player.id, player]))
+    records.forEach((player) => players.set(player.id, player))
+    writeGuestSession({
+      ...guestSession,
+      savedData: { ...guestSession.savedData, players: Array.from(players.values()) },
+    })
+    return
+  }
+
   const database = await openDatabase()
   const transaction = database.transaction(PLAYER_STORE, 'readwrite')
   for (const player of records) transaction.objectStore(PLAYER_STORE).put(player)
@@ -677,6 +756,18 @@ export async function savePlayers(names: string[]): Promise<void> {
 }
 
 export async function deleteSavedPlayer(playerId: string): Promise<void> {
+  const guestSession = readGuestSession()
+  if (guestSession) {
+    writeGuestSession({
+      ...guestSession,
+      savedData: {
+        ...guestSession.savedData,
+        players: guestSession.savedData.players.filter((player) => player.id !== playerId),
+      },
+    })
+    return
+  }
+
   const database = await openDatabase()
   const transaction = database.transaction(PLAYER_STORE, 'readwrite')
   transaction.objectStore(PLAYER_STORE).delete(playerId)
@@ -692,6 +783,20 @@ export async function deleteSavedPlayer(playerId: string): Promise<void> {
 }
 
 export async function saveFinishedMatch(match: SavedMatch): Promise<void> {
+  const guestSession = readGuestSession()
+  if (guestSession) {
+    const players = new Map(guestSession.savedData.players.map((player) => [player.id, player]))
+    match.players.forEach((player) => players.set(player.name.trim().toLowerCase(), playerRecord(player.name, match.playedAt)))
+    writeGuestSession({
+      ...guestSession,
+      savedData: {
+        players: Array.from(players.values()),
+        matches: [match, ...guestSession.savedData.matches.filter((savedMatch) => savedMatch.id !== match.id)],
+      },
+    })
+    return
+  }
+
   const database = await openDatabase()
   const transaction = database.transaction([PLAYER_STORE, MATCH_STORE], 'readwrite')
   const playerStore = transaction.objectStore(PLAYER_STORE)
@@ -725,6 +830,18 @@ export async function saveFinishedMatch(match: SavedMatch): Promise<void> {
 }
 
 export async function deleteSavedMatch(matchId: string): Promise<void> {
+  const guestSession = readGuestSession()
+  if (guestSession) {
+    writeGuestSession({
+      ...guestSession,
+      savedData: {
+        ...guestSession.savedData,
+        matches: guestSession.savedData.matches.filter((match) => match.id !== matchId),
+      },
+    })
+    return
+  }
+
   const database = await openDatabase()
   const transaction = database.transaction(MATCH_STORE, 'readwrite')
   transaction.objectStore(MATCH_STORE).delete(matchId)
@@ -736,6 +853,7 @@ export async function deleteSavedMatch(matchId: string): Promise<void> {
 }
 
 export async function sendMatchReport(match: SavedMatch): Promise<'sent' | 'queued' | 'unavailable'> {
+  if (readGuestSession()) return 'unavailable'
   if (!supabase) return 'unavailable'
   if (!navigator.onLine) {
     await queueChange({ kind: 'send-email', match })
