@@ -71,6 +71,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .admin-export-button { min-height: 40px; white-space: nowrap; }
 .admin-export-button:disabled, .admin-signup-actions button:disabled, .admin-role-form button:disabled, .admin-list button:disabled { cursor: not-allowed; opacity: .55; }
 .admin-message { margin: 13px 0 0; color: var(--green); font-size: 12px; line-height: 1.5; }
+.admin-message.is-error { color: #9b452f; }
 .admin-empty { margin: 17px 0 0; color: var(--muted); font-size: 12px; }
 .admin-event { padding-top: 16px; }
 .admin-event + .admin-event { margin-top: 15px; border-top: 1px solid var(--line); }
@@ -133,12 +134,20 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .tournament-actions .admin-empty { margin: 0; line-height: 1.5; }
 .tournament-champion { margin: 16px 0 0; padding: 13px; background: #175c4510; color: var(--green); font-family: var(--serif); font-size: 20px; text-align: center; }
 .tournament-archive { padding-top: 17px; border-top: 1px solid var(--line); }
+.tournament-archive-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .tournament-archive h3 { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 0; font-size: 14px; }
 .tournament-archive h3 span { color: var(--green); font: 9px var(--mono); }
+.tournament-delete-button { color: #9b452f !important; }
 .tournament-archive > p { margin: 7px 0 12px; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .tournament-archive ul { display: grid; margin: 0; padding: 0; list-style: none; }
 .tournament-archive li { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 45px; padding: 7px 0; border-top: 1px solid #d9d7ce80; }
 .tournament-archive li > div { min-width: 0; display: grid; gap: 4px; }
+.tournament-archive li > .tournament-archive-actions { display: flex; flex: none; flex-wrap: wrap; gap: 7px; }
+.tournament-delete-confirmation { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding: 9px; border: 1px solid #9b452f66; background: #9b452f0d; color: #7f321f; font-size: 11px; line-height: 1.45; }
+.tournament-delete-confirmation > span { flex: 1 1 100%; }
+.tournament-delete-confirmation button { min-height: 32px; padding: 0 10px; border: 1px solid var(--line); background: #fffefa; color: var(--ink); font-size: 10px; font-weight: 700; cursor: pointer; }
+.tournament-delete-confirmation .tournament-delete-button { border-color: #9b452f; background: #9b452f; color: #fff !important; }
+.tournament-delete-confirmation button:disabled, .tournament-archive li button:disabled { cursor: not-allowed; opacity: .55; }
 .tournament-archive li strong { font-size: 12px; }
 .tournament-archive li span { color: var(--muted); font-size: 10px; }
 .tournament-archive li button { min-height: 32px; flex: none; padding: 0 10px; border: 1px solid var(--green); background: transparent; color: var(--green); font-size: 10px; font-weight: 700; cursor: pointer; }
@@ -549,7 +558,11 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
   .admin-role-form { grid-template-columns: minmax(0, 1fr); }
   .admin-role-form .primary-button { width: 100%; }
   .tournament-seed-list { grid-template-columns: minmax(0, 1fr); }
-  .tournament-match { align-items: stretch; flex-direction: column; }
+  .tournament-match, .tournament-archive li { align-items: stretch; flex-direction: column; }
+  .tournament-archive-heading { align-items: flex-start; flex-direction: column; }
+  .tournament-archive-heading > * { width: 100%; }
+  .tournament-archive li > .tournament-archive-actions { width: 100%; }
+  .tournament-archive-actions button { flex: 1; }
   .tournament-match-result { max-width: none; text-align: left; }
   .tournament-play-button { width: 100%; }
   .tournament-actions { align-items: stretch; flex-direction: column; }

@@ -441,6 +441,20 @@ export async function saveClubTournament(tournament: ClubTournament): Promise<vo
   if (error) throw error
 }
 
+export async function deleteClubTournament(eventDate: string): Promise<void> {
+  if (!supabase) throw new Error('Supabase er ikke konfigurert.')
+  if (!navigator.onLine) throw new Error('Du må være på nett for å slette turneringen.')
+  const { error } = await supabase.from('club_tournaments').delete().eq('event_date', eventDate)
+  if (error) throw error
+}
+
+export async function deleteAllClubTournaments(): Promise<void> {
+  if (!supabase) throw new Error('Supabase er ikke konfigurert.')
+  if (!navigator.onLine) throw new Error('Du må være på nett for å slette turneringene.')
+  const { error } = await supabase.from('club_tournaments').delete().not('event_date', 'is', null)
+  if (error) throw error
+}
+
 export async function loadLinkedPlayerProfile(userId: string): Promise<{ playerId: string | null; avatarUrl: string | null }> {
   if (!supabase) throw new Error('Supabase er ikke konfigurert.')
   const { data, error } = await supabase

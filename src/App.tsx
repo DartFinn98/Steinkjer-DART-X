@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { getCheckoutHint } from './checkout'
-import { deleteClubSignup, deleteSavedMatch, deleteSavedPlayer, loadClubAdminStatus, loadClubAdmins, loadClubSignups, loadClubTournaments, loadLinkedPlayerProfile, loadSavedData, saveClubSignup, saveClubTournament, saveFinishedMatch, saveLinkedPlayerId, savePlayers, sendMatchReport, setClubAdminRole, syncPendingChanges, updateClubSignup, uploadProfileAvatar } from './database'
+import { deleteAllClubTournaments, deleteClubSignup, deleteClubTournament, deleteSavedMatch, deleteSavedPlayer, loadClubAdminStatus, loadClubAdmins, loadClubSignups, loadClubTournaments, loadLinkedPlayerProfile, loadSavedData, saveClubSignup, saveClubTournament, saveFinishedMatch, saveLinkedPlayerId, savePlayers, sendMatchReport, setClubAdminRole, syncPendingChanges, updateClubSignup, uploadProfileAvatar } from './database'
 import type { ClubAdmin, ClubSignup, ClubTournament, SavedData, TournamentMatch } from './database'
 import { supabase } from './supabase'
 import type { Session } from '@supabase/supabase-js'
@@ -69,12 +69,22 @@ type TournamentBoardProps = {
   canPlayMatch: boolean
   isAdmin: boolean
   message: string
+  messageIsError: boolean
   onEventDateChange: (date: string) => void
   onSeedChange: (signupId: string, rank: string) => void
   onDraw: () => void
   onPlayMatch: (match: TournamentMatch) => void
   onToggleAdvancement: (signupId: string, advances: boolean) => void
   onCreateCup: () => void
+  pendingDeleteDate: string | null
+  confirmDeleteAll: boolean
+  deleting: boolean
+  activeTournamentDate: string | null
+  onRequestDeleteTournament: (eventDate: string) => void
+  onDeleteTournament: (eventDate: string) => void
+  onConfirmDeleteAll: () => void
+  onCancelDelete: () => void
+  onDeleteAll: () => void
 }
 
 function TournamentBoard({
@@ -88,12 +98,22 @@ function TournamentBoard({
   canPlayMatch,
   isAdmin,
   message,
+  messageIsError,
   onEventDateChange,
   onSeedChange,
   onDraw,
   onPlayMatch,
   onToggleAdvancement,
   onCreateCup,
+  pendingDeleteDate,
+  confirmDeleteAll,
+  deleting,
+  activeTournamentDate,
+  onRequestDeleteTournament,
+  onDeleteTournament,
+  onConfirmDeleteAll,
+  onCancelDelete,
+  onDeleteAll,
 }: TournamentBoardProps) {
   const seedOptions = Array.from({ length: signups.length }, (_, index) => String(index + 1))
   const tournamentPools = tournament
@@ -122,7 +142,7 @@ function TournamentBoard({
         {!tournament && isAdmin && <button className="primary-button admin-export-button" type="button" disabled={busy || signups.length < 2} onClick={onDraw}>Trekk puljer</button>}
       </div>
     </div>
-    {message && <p className="admin-message" role="status">{message}</p>}
+    {message && <p className={`admin-message${messageIsError ? ' is-error' : ''}`} role={messageIsError ? 'alert' : 'status'}>{message}</p>}
     {!tournament ? <div className="tournament-draw">
       <p className="admin-empty">{signups.length} påmeldte. Velg eventuelle seedede spillere før du trekker. Seedede plasseres først i ulike puljer; de øvrige fordeles tilfeldig og jevnt. Puljene har maks åtte spillere.</p>
       {isAdmin && signups.length > 0 && <ul className="tournament-seed-list">{signups.map((signup) => {
@@ -154,7 +174,7 @@ function TournamentBoard({
         <button className="primary-button" type="button" disabled={busy || tournament.participants.filter((participant) => participant.advances).length < 2} onClick={onCreateCup}>Lag cup-oppsett</button>
       </div>}
       {cupMatches.length > 0 && <section className="tournament-pool">
-        <h3>Cup-oppsett<span>{tournamentFinished ? 'Ferdig' : `Runde ${tournament.cupRound}`}</span></h3>
+        <h3>Cup-oppsett<span>{tournamentFinished ? 'Ferdig' : `${getRoundLabel(tournament.cupRound, cupRoundMatches.length)} gjenstår`}</span></h3>
         {Array.from(new Set(cupMatches.map((match) => match.roundNumber))).sort((first, second) => first - second).map((round) => {
           const roundMatches = cupMatches.filter((match) => match.roundNumber === round).sort((first, second) => first.bracketPosition - second.bracketPosition)
           return <section className="tournament-cup-round" key={round}><h4>{getRoundLabel(round, roundMatches.length)}</h4><ul className="tournament-match-list">{roundMatches.map((match) => <TournamentMatchRow key={match.id} match={match} tournament={tournament} isAdmin={isAdmin} busy={busy} canPlayMatch={canPlayMatch} onPlayMatch={onPlayMatch} />)}</ul></section>
@@ -162,19 +182,26 @@ function TournamentBoard({
         {tournamentFinished && <p className="tournament-champion">Vinner: {participantName(cupRoundMatches[0].winnerSignupId!)}</p>}
       </section>}
       {isAdmin && archivedTournaments.length > 0 && <section className="tournament-archive">
-        <h3>Arkiv for turneringsark<span>{archivedTournaments.length} turneringer</span></h3>
+        <div className="tournament-archive-heading"><h3>Arkiv for turneringsark<span>{archivedTournaments.length} turneringer</span></h3><button className="tournament-delete-button" type="button" disabled={deleting || activeTournamentDate !== null} onClick={onConfirmDeleteAll}>Slett alle turneringer</button></div>
         <p>Turneringsarkene kan åpnes og skrives ut på nytt. Velg «Skriv ut som PDF» i utskriftsvinduet for å lagre en digital kopi.</p>
+        {confirmDeleteAll && <div className="tournament-delete-confirmation" role="alert"><span>Er du sikker på at du vil slette alle {archivedTournaments.length} turneringene? Dette kan ikke angres.</span><button className="tournament-delete-button" type="button" disabled={deleting} onClick={onDeleteAll}>{deleting ? 'Sletter …' : 'Ja, slett alle'}</button><button type="button" disabled={deleting} onClick={onCancelDelete}>Avbryt</button></div>}
         <ul>{[...archivedTournaments].sort((first, second) => second.eventDate.localeCompare(first.eventDate)).map((archived) => {
           const cupRounds = archived.matches.filter((match) => match.phase === 'cup')
           const finalMatch = cupRounds.find((match) => match.roundNumber === archived.cupRound)
-          const status = finalMatch?.winnerSignupId
+          const poolMatches = archived.matches.filter((match) => match.phase === 'pool')
+          const incompletePoolMatches = poolMatches.filter((match) => match.winnerSignupId === null).length
+          const status = archived.participants.length < 2 || poolMatches.length === 0
+            ? 'Feil: puljeoppsett mangler'
+            : finalMatch?.winnerSignupId
             ? 'Ferdig'
-            : archived.cupRound > 0 ? 'Cup pågår'
-              : archived.matches.length > 0 && archived.matches.every((match) => match.winnerSignupId !== null)
-                ? 'Puljer ferdige' : 'Puljespill'
+            : archived.cupRound > 0
+              ? `${getRoundLabel(archived.cupRound, cupRounds.filter((match) => match.roundNumber === archived.cupRound).length)} gjenstår`
+              : incompletePoolMatches === 0 ? 'Puljer ferdige' : `Puljespill · ${incompletePoolMatches} kamper gjenstår`
           return <li key={archived.eventDate}>
-            <div><strong>{formatClubDate(archived.eventDate)}</strong><span>{archived.participants.length} spillere · {status}</span></div>
-            <button type="button" disabled={archived.eventDate === eventDate} aria-pressed={archived.eventDate === eventDate} onClick={() => onEventDateChange(archived.eventDate)}>{archived.eventDate === eventDate ? 'Valgt' : 'Åpne ark'}</button>
+            <div className="tournament-archive-info"><strong>{formatClubDate(archived.eventDate)}</strong><span>{archived.participants.length} spillere · {status}</span>
+              {pendingDeleteDate === archived.eventDate && <div className="tournament-delete-confirmation" role="alert"><span>Slette turneringen fra {formatClubDate(archived.eventDate)}? Dette kan ikke angres.</span><button className="tournament-delete-button" type="button" disabled={deleting} onClick={() => onDeleteTournament(archived.eventDate)}>{deleting ? 'Sletter …' : 'Ja, slett'}</button><button type="button" disabled={deleting} onClick={onCancelDelete}>Avbryt</button></div>}
+            </div>
+            <div className="tournament-archive-actions"><button type="button" disabled={archived.eventDate === eventDate} aria-pressed={archived.eventDate === eventDate} onClick={() => onEventDateChange(archived.eventDate)}>{archived.eventDate === eventDate ? 'Valgt' : 'Åpne ark'}</button><button className="tournament-delete-button" type="button" disabled={deleting || pendingDeleteDate !== null || activeTournamentDate === archived.eventDate} onClick={() => onRequestDeleteTournament(archived.eventDate)}>Slett</button></div>
           </li>
         })}</ul>
       </section>}
@@ -524,6 +551,10 @@ function App() {
   const [tournamentSeedRanks, setTournamentSeedRanks] = useState<Record<string, string>>({})
   const [tournamentBusy, setTournamentBusy] = useState(false)
   const [tournamentMessage, setTournamentMessage] = useState('')
+  const [tournamentMessageIsError, setTournamentMessageIsError] = useState(false)
+  const [pendingTournamentDeleteDate, setPendingTournamentDeleteDate] = useState<string | null>(null)
+  const [confirmDeleteAllTournaments, setConfirmDeleteAllTournaments] = useState(false)
+  const [tournamentDeleting, setTournamentDeleting] = useState(false)
   const [activeTournamentMatch, setActiveTournamentMatch] = useState<ActiveTournamentMatch | null>(null)
   const [tournamentMatchMessage, setTournamentMatchMessage] = useState('')
   const [linkedPlayerId, setLinkedPlayerId] = useState<string | null>(null)
@@ -690,8 +721,12 @@ function App() {
     setTournamentMessage('')
     void loadClubTournaments().then((tournaments) => {
       if (mounted) setClubTournaments(tournaments)
-    }).catch(() => {
-      if (mounted) setTournamentMessage('Kunne ikke hente turneringene. Kontroller at turneringstabellen er satt opp i Supabase.')
+    }).catch((error: unknown) => {
+      if (mounted) {
+        showTournamentError(error instanceof Error
+          ? `Kunne ikke hente turneringene: ${error.message}`
+          : 'Kunne ikke hente turneringene. Kontroller tilkoblingen og Supabase-oppsettet.')
+      }
     })
     return () => { mounted = false }
   }, [appSection, session, isOnline])
@@ -1349,17 +1384,76 @@ function App() {
     }
   }
 
+  function showTournamentError(errorMessage: string) {
+    setTournamentMessage(errorMessage)
+    setTournamentMessageIsError(true)
+  }
+
+  function requestTournamentDelete(eventDate: string) {
+    setPendingTournamentDeleteDate(eventDate)
+    setConfirmDeleteAllTournaments(false)
+    setTournamentMessage('')
+    setTournamentMessageIsError(false)
+  }
+
+  async function removeTournament(eventDate: string) {
+    if (!isClubAdmin) return
+    if (activeTournamentMatch?.eventDate === eventDate) {
+      showTournamentError('Avslutt turneringskampen før du sletter denne turneringen.')
+      return
+    }
+    setTournamentDeleting(true)
+    setTournamentMessage('')
+    setTournamentMessageIsError(false)
+    try {
+      await deleteClubTournament(eventDate)
+      setClubTournaments((current) => current.filter((tournament) => tournament.eventDate !== eventDate))
+      setPendingTournamentDeleteDate(null)
+      setTournamentMessage('Turneringen er slettet.')
+      setTournamentMessageIsError(false)
+    } catch (error) {
+      showTournamentError(error instanceof Error ? error.message : 'Turneringen kunne ikke slettes.')
+    } finally {
+      setTournamentDeleting(false)
+    }
+  }
+
+  async function removeAllTournaments() {
+    if (!isClubAdmin) return
+    if (activeTournamentMatch) {
+      showTournamentError('Avslutt turneringskampen før du sletter alle turneringene.')
+      return
+    }
+    setTournamentDeleting(true)
+    setTournamentMessage('')
+    setTournamentMessageIsError(false)
+    try {
+      await deleteAllClubTournaments()
+      setClubTournaments([])
+      setPendingTournamentDeleteDate(null)
+      setConfirmDeleteAllTournaments(false)
+      setTournamentMessage('Alle turneringene er slettet.')
+      setTournamentMessageIsError(false)
+    } catch (error) {
+      showTournamentError(error instanceof Error ? error.message : 'Turneringene kunne ikke slettes.')
+    } finally {
+      setTournamentDeleting(false)
+    }
+  }
+
   async function persistTournament(tournament: ClubTournament, successMessage: string) {
     if (!isClubAdmin) return
     setTournamentBusy(true)
     setTournamentMessage('')
+    setTournamentMessageIsError(false)
+    setTournamentMessageIsError(false)
     try {
       await saveClubTournament(tournament)
       setClubTournaments((current) => [...current.filter((item) => item.eventDate !== tournament.eventDate), tournament]
         .sort((first, second) => first.eventDate.localeCompare(second.eventDate)))
       setTournamentMessage(successMessage)
     } catch (error) {
-      setTournamentMessage(error instanceof Error ? error.message : 'Turneringen kunne ikke lagres.')
+      showTournamentError(error instanceof Error ? error.message : 'Turneringen kunne ikke lagres.')
     } finally {
       setTournamentBusy(false)
     }
@@ -1391,6 +1485,7 @@ function App() {
     }
     setTournamentBusy(true)
     setTournamentMessage('')
+    setTournamentMessageIsError(false)
     setTournamentMatchMessage('Lagrer turneringsresultatet …')
     try {
       let updatedTournament = updateTournamentMatchResult(
@@ -1428,7 +1523,7 @@ function App() {
     const participantOne = selectedTournament.participants.find((participant) => participant.signupId === match.playerOneSignupId)
     const participantTwo = selectedTournament.participants.find((participant) => participant.signupId === match.playerTwoSignupId)
     if (!participantOne || !participantTwo) {
-      setTournamentMessage('Spillerne i denne turneringskampen ble ikke funnet.')
+      showTournamentError('Spillerne i denne turneringskampen ble ikke funnet.')
       return
     }
     const playerOneId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-1`
@@ -1488,7 +1583,7 @@ function App() {
       if (!rawRank) continue
       const seedRank = Number(rawRank)
       if (!Number.isInteger(seedRank) || seedRank < 1 || seedRank > currentTournamentSignups.length) {
-        setTournamentMessage('Seedingsnummeret må være mellom 1 og antall påmeldte.')
+        showTournamentError('Seedingsnummeret må være mellom 1 og antall påmeldte.')
         return
       }
       seedRanks.set(signupId, seedRank)
@@ -1497,7 +1592,7 @@ function App() {
       const tournament = drawClubPools(tournamentDate, currentTournamentSignups, seedRanks)
       await persistTournament(tournament, 'Puljene og kampoppsettet er trukket.')
     } catch (error) {
-      setTournamentMessage(error instanceof Error ? error.message : 'Puljene kunne ikke trekkes.')
+      showTournamentError(error instanceof Error ? error.message : 'Puljene kunne ikke trekkes.')
     }
   }
 
@@ -1516,7 +1611,7 @@ function App() {
       const advancingIds = new Set(selectedTournament.participants.filter((participant) => participant.advances).map((participant) => participant.signupId))
       await persistTournament(setTournamentAdvancement(selectedTournament, advancingIds), 'Cup-oppsettet er laget.')
     } catch (error) {
-      setTournamentMessage(error instanceof Error ? error.message : 'Cup-oppsettet kunne ikke lages.')
+      showTournamentError(error instanceof Error ? error.message : 'Cup-oppsettet kunne ikke lages.')
     }
   }
 
@@ -1628,7 +1723,17 @@ function App() {
             canPlayMatch={(players.length === 0 || matchWinnerId !== null) && !activeTournamentMatch}
             isAdmin
             message={tournamentMessage}
-            onEventDateChange={(date) => { setTournamentDate(date); setTournamentMessage(''); setTournamentSeedRanks({}) }}
+            messageIsError={tournamentMessageIsError}
+            pendingDeleteDate={pendingTournamentDeleteDate}
+            confirmDeleteAll={confirmDeleteAllTournaments}
+            deleting={tournamentDeleting}
+            activeTournamentDate={activeTournamentMatch?.eventDate ?? null}
+            onDeleteTournament={removeTournament}
+            onRequestDeleteTournament={requestTournamentDelete}
+            onConfirmDeleteAll={() => { setConfirmDeleteAllTournaments(true); setPendingTournamentDeleteDate(null); setTournamentMessage(''); setTournamentMessageIsError(false) }}
+            onCancelDelete={() => { setPendingTournamentDeleteDate(null); setConfirmDeleteAllTournaments(false) }}
+            onDeleteAll={removeAllTournaments}
+            onEventDateChange={(date) => { setTournamentDate(date); setTournamentMessage(''); setTournamentMessageIsError(false); setTournamentSeedRanks({}); setPendingTournamentDeleteDate(null); setConfirmDeleteAllTournaments(false) }}
             onSeedChange={(signupId, rank) => setTournamentSeedRanks((current) => ({ ...current, [signupId]: rank }))}
             onDraw={() => void drawTournamentPools()}
             onPlayMatch={startTournamentMatch}
@@ -1663,7 +1768,17 @@ function App() {
             canPlayMatch={(players.length === 0 || matchWinnerId !== null) && !activeTournamentMatch}
             isAdmin={isClubAdmin}
             message={tournamentMessage}
-            onEventDateChange={(date) => { setTournamentDate(date); setTournamentMessage(''); setTournamentSeedRanks({}) }}
+            messageIsError={tournamentMessageIsError}
+            pendingDeleteDate={pendingTournamentDeleteDate}
+            confirmDeleteAll={confirmDeleteAllTournaments}
+            deleting={tournamentDeleting}
+            activeTournamentDate={activeTournamentMatch?.eventDate ?? null}
+            onDeleteTournament={removeTournament}
+            onRequestDeleteTournament={requestTournamentDelete}
+            onConfirmDeleteAll={() => { setConfirmDeleteAllTournaments(true); setPendingTournamentDeleteDate(null); setTournamentMessage(''); setTournamentMessageIsError(false) }}
+            onCancelDelete={() => { setPendingTournamentDeleteDate(null); setConfirmDeleteAllTournaments(false) }}
+            onDeleteAll={removeAllTournaments}
+            onEventDateChange={(date) => { setTournamentDate(date); setTournamentMessage(''); setTournamentMessageIsError(false); setTournamentSeedRanks({}); setPendingTournamentDeleteDate(null); setConfirmDeleteAllTournaments(false) }}
             onSeedChange={(signupId, rank) => setTournamentSeedRanks((current) => ({ ...current, [signupId]: rank }))}
             onDraw={() => void drawTournamentPools()}
             onPlayMatch={startTournamentMatch}
