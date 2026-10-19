@@ -637,7 +637,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
-@page { size: A4 portrait; margin: 12mm; }
+@page { size: A4 landscape; margin: 10mm; }
 @media print {
   body { min-width: 0; min-height: 0; background: #fff; }
   .app-shell { min-height: 0; padding: 0; }
@@ -673,4 +673,42 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
   .tournament-print-cup-matches th:first-child, .tournament-print-cup-matches td:first-child { width: 15mm; text-align: center; }
   .tournament-print-cup-matches th:nth-child(3), .tournament-print-cup-matches td:nth-child(3) { width: 33mm; text-align: center; }
   .tournament-print-cup > p:last-child { margin-top: 4mm; font-size: 9pt; }
+  .tournament-print-pool-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 8mm; margin-bottom: 5mm; }
+  .tournament-print-pool-heading h2 { flex: 1; margin: 0; }
+  .tournament-print-pool-heading p { margin: 0; color: #333; font-size: 9pt; white-space: nowrap; }
+  .tournament-print-pool-heading p span { margin-left: 12mm; }
+  .tournament-print-pool .tournament-print-standings { margin: 0; font-size: 8pt; }
+  .tournament-print-pool .tournament-print-standings th,
+  .tournament-print-pool .tournament-print-standings td { height: 11mm; padding: 1mm; text-align: center; }
+  .tournament-print-pool .tournament-print-standings th:nth-child(2),
+  .tournament-print-pool .tournament-print-standings td:nth-child(2) { width: 43mm; text-align: left; }
+  .tournament-print-pool .tournament-print-standings th:nth-child(3),
+  .tournament-print-pool .tournament-print-standings td:nth-child(3) { width: 25mm; }
+  .tournament-print-pool .tournament-print-standings th:first-child,
+  .tournament-print-pool .tournament-print-standings td:first-child { width: 10mm; }
+  .tournament-print-pool .tournament-print-standings th:nth-last-child(3),
+  .tournament-print-pool .tournament-print-standings td:nth-last-child(3) { width: 17mm; }
+  .tournament-print-pool .tournament-print-standings th:nth-last-child(2),
+  .tournament-print-pool .tournament-print-standings td:nth-last-child(2) { width: 19mm; }
+  .tournament-print-pool .tournament-print-standings th:last-child,
+  .tournament-print-pool .tournament-print-standings td:last-child { width: 13mm; }
+  .tournament-print-pool .tournament-print-standings small { display: block; margin-top: .5mm; color: #444; font-size: 7pt; }
+  .tournament-print-matrix-diagonal { background: #dededb; }
+  .tournament-print-matrix-score { font-size: 7pt; white-space: nowrap; }
+  .tournament-print-pool-footer { display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 8mm; margin-top: 7mm; }
+  .tournament-print-pool-footer h3 { margin: 0 0 2mm; font-size: 9pt; }
+  .tournament-print-pool-footer ol { display: flex; gap: 8mm; min-height: 10mm; margin: 0; padding-left: 5mm; }
+  .tournament-print-pool-footer > div > p,
+  .tournament-print-records p { margin: 2mm 0; font-size: 8pt; }
+  .tournament-print-pool-status { margin: 0; color: #444; font-size: 8pt; }
+  .tournament-print-cup { break-after: auto; page-break-after: auto; }
+  .tournament-print-bracket-headings { display: grid; gap: 3mm; margin: 4mm 0 2mm; }
+  .tournament-print-bracket-headings h3 { margin: 0; padding-bottom: 1mm; border-bottom: 1px solid #777; font-size: 8pt; text-align: center; }
+  .tournament-print-bracket { display: grid; height: 158mm; gap: 1mm 3mm; }
+  .tournament-print-bracket-match { position: relative; align-self: center; display: grid; grid-template-columns: minmax(0, 1fr) 7mm; grid-template-rows: 1fr 1fr; min-width: 0; border: 1px solid #777; background: #fff; font-size: 6.5pt; line-height: 1.1; }
+  .tournament-print-bracket-match > span { min-width: 0; overflow: hidden; padding: .5mm 1mm; text-overflow: ellipsis; white-space: nowrap; }
+  .tournament-print-bracket-match > span:nth-child(even) { border-left: 1px solid #aaa; text-align: center; }
+  .tournament-print-bracket-match > span:nth-child(n+3) { border-top: 1px solid #aaa; }
+  .tournament-print-cup-footer { display: flex; justify-content: space-between; gap: 5mm; margin-top: 4mm; font-size: 8pt; }
+  .tournament-print-cup-footer strong { font-size: 8pt; }
 }

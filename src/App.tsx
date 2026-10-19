@@ -243,72 +243,101 @@ function TournamentBoard({
           const matches = poolMatches.filter((match) => match.poolNumber === poolNumber)
           const poolStandings = getPoolStandings(tournament, poolNumber)
           const poolIsComplete = matches.every((match) => match.winnerSignupId !== null)
-          return <section className="tournament-print-sheet" key={`print-pool-${poolNumber}`}>
-            <h2>Pulje {poolNumber}</h2>
-            <p className="tournament-print-date">{formatClubDate(tournament.eventDate)}</p>
+          const poolParticipants = tournament.participants.filter((participant) => participant.poolNumber === poolNumber)
+          const advancingPlayers = poolParticipants.filter((participant) => participant.advances)
+          return <section className="tournament-print-sheet tournament-print-pool" key={`print-pool-${poolNumber}`}>
+            <div className="tournament-print-pool-heading"><h2>Pulje {poolNumber}</h2><p>{formatClubDate(tournament.eventDate)} <span>Bane nr. __________</span></p></div>
             <table className="tournament-print-standings">
-              <thead><tr><th>Plass</th><th>Spiller</th><th>Seire</th><th>Leggdifferanse</th></tr></thead>
-              <tbody>{poolStandings.map((participant, index) => <tr key={participant.signupId}>
-                <td className="tournament-print-rank">{poolIsComplete ? index + 1 : ''}</td>
-                <td>{participant.playerName}{participant.seed !== null && <small>Seed {participant.seed}</small>}</td>
-                <td className="tournament-print-stat">{participant.wins}</td>
-                <td className="tournament-print-stat">{participant.legDifference > 0 ? `+${participant.legDifference}` : participant.legDifference}</td>
-              </tr>)}</tbody>
-            </table>
-            <h3>Kampoppsett · best av 3 legg</h3>
-            <table className="tournament-print-matches">
-              <thead><tr><th>Kamp</th><th>Spiller 1</th><th>Legg</th><th>Spiller 2</th><th>Legg</th></tr></thead>
-              <tbody>{matches.map((match, index) => <tr key={match.id}>
-                <td>{index + 1}</td>
-                <td>{participantName(match.playerOneSignupId)}</td>
-                <td className="tournament-print-score">{match.playerOneLegs ?? ''}</td>
-                <td>{participantName(match.playerTwoSignupId!)}</td>
-                <td className="tournament-print-score">{match.playerTwoLegs ?? ''}</td>
-              </tr>)}</tbody>
-            </table>
-          </section>
-        })}
-        {cupMatches.length > 0 && Array.from({ length: Math.ceil(Math.log2(cupMatches.filter((match) => match.roundNumber === 1).length)) + 1 }, (_, index) => index + 1).map((round) => {
-          const matchesInRound = cupMatches.filter((match) => match.roundNumber === round)
-            .sort((first, second) => first.bracketPosition - second.bracketPosition)
-          const firstRoundCount = cupMatches.filter((match) => match.roundNumber === 1).length
-          const expectedMatchCount = Math.max(1, firstRoundCount / 2 ** (round - 1))
-          const roundMatchCount = matchesInRound.length || expectedMatchCount
-          const roundTitle = roundMatchCount === 1 ? 'Finale' : roundMatchCount === 2 ? 'Semifinale' : `Cup · runde ${round}`
-          return <section className="tournament-print-sheet tournament-print-cup" key={`print-cup-${round}`}>
-            <h2>Cup · {roundTitle}</h2>
-            <p className="tournament-print-date">{formatClubDate(tournament.eventDate)}</p>
-            <table className="tournament-print-cup-matches">
-              <thead><tr><th>Kamp</th><th>Spiller 1</th><th>Resultat</th><th>Spiller 2</th></tr></thead>
-              <tbody>{Array.from({ length: roundMatchCount }, (_, index) => {
-                const match = matchesInRound[index]
-                const previousRoundMatches = cupMatches.filter((candidate) => candidate.roundNumber === round - 1)
-                  .sort((first, second) => first.bracketPosition - second.bracketPosition)
-                const sourceMatches = previousRoundMatches.slice(index * 2, index * 2 + 2)
-                const playerOne = match
-                  ? participantName(match.playerOneSignupId)
-                  : round === 1 ? '' : sourceMatches[0]?.winnerSignupId
-                    ? participantName(sourceMatches[0].winnerSignupId)
-                    : `Vinner kamp ${(index * 2) + 1}`
-                const playerTwo = match?.playerTwoSignupId
-                  ? participantName(match.playerTwoSignupId)
-                  : match ? 'Walkover'
-                    : round === 1 ? '' : sourceMatches[1]?.winnerSignupId
-                      ? participantName(sourceMatches[1].winnerSignupId)
-                      : `Vinner kamp ${(index * 2) + 2}`
-                return <tr key={match?.id ?? `cup-${round}-${index}`}>
-                  <td>{index + 1}</td>
-                  <td>{playerOne}</td>
-                  <td className="tournament-print-cup-score">{match?.playerOneLegs !== null && match?.playerOneLegs !== undefined
-                    ? `${match.playerOneLegs}–${match.playerTwoLegs ?? ''}`
-                    : match?.winnerSignupId ? 'Walkover' : ''}</td>
-                  <td>{playerTwo}</td>
+              <thead><tr><th>Nr</th><th>Navn</th><th>Klubb</th>{poolParticipants.map((_, index) => <th key={index}>{index + 1}</th>)}{Array.from({ length: 8 - poolParticipants.length }, (_, index) => <th key={`empty-${index}`}>{poolParticipants.length + index + 1}</th>)}<th>Sum seire</th><th>Legg diff.</th><th>Plass</th></tr></thead>
+              <tbody>{poolStandings.map((participant) => {
+                const participantIndex = poolParticipants.findIndex((item) => item.signupId === participant.signupId)
+                return <tr key={participant.signupId}>
+                  <td className="tournament-print-rank">{participantIndex + 1}</td>
+                  <td>{participant.playerName}{participant.seed !== null && <small>Seed {participant.seed}</small>}</td>
+                  <td />
+                  {poolParticipants.map((opponent) => {
+                    if (opponent.signupId === participant.signupId) return <td className="tournament-print-matrix-diagonal" key={opponent.signupId} />
+                    const match = matches.find((candidate) => (
+                      candidate.playerOneSignupId === participant.signupId && candidate.playerTwoSignupId === opponent.signupId
+                    ) || (
+                      candidate.playerTwoSignupId === participant.signupId && candidate.playerOneSignupId === opponent.signupId
+                    ))
+                    if (!match || match.playerOneLegs === null || match.playerTwoLegs === null) {
+                      return <td key={opponent.signupId} />
+                    }
+                    const score = match.playerOneSignupId === participant.signupId
+                      ? `${match.playerOneLegs}–${match.playerTwoLegs}`
+                      : `${match.playerTwoLegs}–${match.playerOneLegs}`
+                    return <td className="tournament-print-matrix-score" key={opponent.signupId}>{score}</td>
+                  })}
+                  {Array.from({ length: 8 - poolParticipants.length }, (_, index) => <td key={`empty-${participantIndex}-${index}`} />)}
+                  <td className="tournament-print-stat">{participant.wins}</td>
+                  <td className="tournament-print-stat">{participant.legDifference > 0 ? `+${participant.legDifference}` : participant.legDifference}</td>
+                  <td className="tournament-print-stat">{poolIsComplete ? poolStandings.findIndex((item) => item.signupId === participant.signupId) + 1 : ''}</td>
                 </tr>
               })}</tbody>
             </table>
-            <p>Format: best av {matchesInRound[0]?.bestOfLegs ?? (roundMatchCount === 1 ? 9 : roundMatchCount === 2 ? 7 : 5)} legg</p>
+            <div className="tournament-print-pool-footer">
+              <div><h3>Går videre til sluttspillet</h3>{advancingPlayers.length > 0 ? <ol>{advancingPlayers.map((participant) => <li key={participant.signupId}>{participant.playerName}</li>)}</ol> : <p>________________________________</p>}</div>
+              <div className="tournament-print-records"><p>Raskeste legg: __________________</p><p>Høyeste utgang: ________________</p></div>
+              <p className="tournament-print-pool-status">{poolIsComplete ? 'Puljen er ferdigspilt' : 'Puljespill · best av 3 legg'}</p>
+            </div>
           </section>
         })}
+        {cupMatches.length > 0 && (() => {
+          const firstRoundMatches = cupMatches.filter((match) => match.roundNumber === 1)
+            .sort((first, second) => first.bracketPosition - second.bracketPosition)
+          const firstRoundCount = firstRoundMatches.length
+          const roundCount = Math.ceil(Math.log2(firstRoundCount)) + 1
+          const roundTitle = (matchCount: number, round: number) => matchCount === 1
+            ? 'Finale'
+            : matchCount === 2 ? 'Semifinale' : `Runde ${round}`
+          return <section className="tournament-print-sheet tournament-print-cup" key="print-cup-bracket">
+            <div className="tournament-print-pool-heading"><h2>Sluttspill · cup</h2><p>{formatClubDate(tournament.eventDate)}</p></div>
+            <div className="tournament-print-bracket-headings" style={{ gridTemplateColumns: `repeat(${roundCount}, minmax(0, 1fr))` }}>{Array.from({ length: roundCount }, (_, roundIndex) => {
+              const count = Math.max(1, firstRoundCount / 2 ** roundIndex)
+              return <h3 key={roundIndex} style={{ gridColumn: roundIndex + 1 }}>{roundTitle(count, roundIndex + 1)}</h3>
+            })}</div>
+            <div className="tournament-print-bracket" style={{
+              gridTemplateColumns: `repeat(${roundCount}, minmax(0, 1fr))`,
+              gridTemplateRows: `repeat(${firstRoundCount * 2}, minmax(0, 1fr))`,
+            }}>
+              {Array.from({ length: roundCount }, (_, roundIndex) => {
+                const round = roundIndex + 1
+                const roundMatches = cupMatches.filter((match) => match.roundNumber === round)
+                  .sort((first, second) => first.bracketPosition - second.bracketPosition)
+                const roundMatchCount = Math.max(1, firstRoundCount / 2 ** roundIndex)
+                const previousRoundMatches = cupMatches.filter((match) => match.roundNumber === round - 1)
+                  .sort((first, second) => first.bracketPosition - second.bracketPosition)
+                return Array.from({ length: roundMatchCount }, (_, index) => {
+                  const match = roundMatches[index]
+                  const sourceMatches = previousRoundMatches.slice(index * 2, index * 2 + 2)
+                  const playerOne = match
+                    ? participantName(match.playerOneSignupId)
+                    : round === 1 ? '' : sourceMatches[0]?.winnerSignupId
+                      ? participantName(sourceMatches[0].winnerSignupId)
+                      : `Vinner kamp ${index * 2 + 1}`
+                  const playerTwo = match?.playerTwoSignupId
+                    ? participantName(match.playerTwoSignupId)
+                    : match ? 'Walkover'
+                      : round === 1 ? '' : sourceMatches[1]?.winnerSignupId
+                        ? participantName(sourceMatches[1].winnerSignupId)
+                        : `Vinner kamp ${index * 2 + 2}`
+                  const rowStart = 1 + index * 2 ** (roundIndex + 1)
+                  const rowSpan = 2 ** (roundIndex + 1)
+                  return <div className="tournament-print-bracket-match" key={match?.id ?? `cup-${round}-${index}`} style={{
+                    gridColumn: roundIndex + 1,
+                    gridRow: `${rowStart} / span ${rowSpan}`,
+                  }}>
+                    <span>{playerOne}</span><span>{match?.playerOneLegs ?? ''}</span>
+                    <span>{playerTwo}</span><span>{match?.playerTwoLegs ?? ''}</span>
+                  </div>
+                })
+              })}
+            </div>
+            <div className="tournament-print-cup-footer"><span>Raskeste legg: __________________</span><span>Høyeste utgang: ________________</span><strong>Finale · best av 9 legg</strong></div>
+          </section>
+        })()}
       </div>}
     </>}
   </section>
