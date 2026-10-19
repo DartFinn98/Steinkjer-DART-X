@@ -24,11 +24,20 @@ export type SavedData = {
   matches: SavedMatch[]
 }
 
+export type ClubSignup = {
+  id: string
+  eventDate: string
+  playerName: string
+  signedUpBy?: string
+  signedUpAt: string
+}
+
 const DATABASE_NAME = 'darttavla'
-const DATABASE_VERSION = 2
+const DATABASE_VERSION = 3
 const PLAYER_STORE = 'players'
 const MATCH_STORE = 'matches'
 const PENDING_STORE = 'pending'
+const CLUB_SIGNUP_STORE = 'club-signups'
 
 type PendingChange =
   | { id: string; kind: 'save-players'; players: SavedPlayer[]; queuedAt: number }
@@ -60,6 +69,9 @@ function openDatabase(): Promise<IDBDatabase> {
       }
       if (!database.objectStoreNames.contains(PENDING_STORE)) {
         database.createObjectStore(PENDING_STORE, { keyPath: 'id' })
+      }
+      if (!database.objectStoreNames.contains(CLUB_SIGNUP_STORE)) {
+        database.createObjectStore(CLUB_SIGNUP_STORE, { keyPath: 'id' })
       }
     }
 
@@ -200,6 +212,105 @@ export async function loadSavedData(): Promise<SavedData> {
   } catch {
     return loadLocalSavedData()
   }
+}
+
+async function loadLocalClubSignups(): Promise<ClubSignup[]> {
+  const database = await openDatabase()
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(CLUB_SIGNUP_STORE, 'readonly')
+    const request = transaction.objectStore(CLUB_SIGNUP_STORE).getAll() as IDBRequest<ClubSignup[]>
+    transaction.oncomplete = () => {
+      database.close()
+      resolve(request.result.sort((first, second) => first.eventDate.localeCompare(second.eventDate) || first.signedUpAt.localeCompare(second.signedUpAt)))
+    }
+    transaction.onerror = () => {
+      database.close()
+      reject(transaction.error ?? new Error('Kunne ikke lese lokale påmeldinger.'))
+    }
+    transaction.onabort = () => {
+      database.close()
+      reject(transaction.error ?? new Error('Lesing av lokale påmeldinger ble avbrutt.'))
+    }
+  })
+}
+
+async function cacheClubSignups(signups: ClubSignup[]): Promise<void> {
+  const database = await openDatabase()
+  const transaction = database.transaction(CLUB_SIGNUP_STORE, 'readwrite')
+  const store = transaction.objectStore(CLUB_SIGNUP_STORE)
+  store.clear()
+  signups.forEach((signup) => store.put(signup))
+  await transactionComplete(database, transaction)
+}
+
+export async function loadClubSignups(): Promise<ClubSignup[]> {
+  if (!supabase || !navigator.onLine) return loadLocalClubSignups()
+
+  const { data, error } = await supabase
+    .from('club_signups')
+    .select('id, event_date, player_name, signed_up_by, signed_up_at')
+    .order('event_date', { ascending: true })
+    .order('signed_up_at', { ascending: true })
+  if (error) throw error
+
+  const signups = (data ?? []).map((signup) => ({
+    id: signup.id,
+    eventDate: signup.event_date,
+    playerName: signup.player_name,
+    signedUpBy: signup.signed_up_by,
+    signedUpAt: signup.signed_up_at,
+  }))
+  await cacheClubSignups(signups)
+  return signups
+}
+
+export async function saveClubSignup(eventDate: string, playerName: string, signedUpBy?: string): Promise<void> {
+  const normalizedName = playerName.trim().replace(/\s+/g, ' ')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate) || normalizedName.length < 1 || normalizedName.length > 24) {
+    throw new Error('Velg en klubbkveld og skriv inn et navn på 1–24 tegn.')
+  }
+  if (supabase && (!navigator.onLine || !signedUpBy)) {
+    throw new Error(!navigator.onLine ? 'Du må være på nett for å melde deg på.' : 'Logg inn for å melde deg på.')
+  }
+
+  const signups = await loadLocalClubSignups()
+  const existingSignup = signups.find((signup) => signup.eventDate === eventDate && (
+    supabase
+      ? signup.signedUpBy === signedUpBy
+      : signup.playerName.toLocaleLowerCase('nb-NO') === normalizedName.toLocaleLowerCase('nb-NO')
+  ))
+  const signup: ClubSignup = {
+    id: existingSignup?.id ?? (supabase ? `${eventDate}:${signedUpBy}` : `${eventDate}:${normalizedName.toLocaleLowerCase('nb-NO')}`),
+    eventDate,
+    playerName: normalizedName,
+    ...(signedUpBy ? { signedUpBy } : {}),
+    signedUpAt: new Date().toISOString(),
+  }
+
+  if (supabase) {
+    const { error } = await supabase.from('club_signups').upsert({
+      id: signup.id,
+      event_date: signup.eventDate,
+      player_name: signup.playerName,
+      signed_up_by: signup.signedUpBy,
+      signed_up_at: signup.signedUpAt,
+    }, { onConflict: 'id' })
+    if (error) throw error
+  }
+
+  await cacheClubSignups([...signups.filter((item) => item.id !== signup.id), signup])
+}
+
+export async function deleteClubSignup(signupId: string): Promise<void> {
+  if (supabase) {
+    if (!navigator.onLine) throw new Error('Du må være på nett for å melde deg av.')
+    const { data, error } = await supabase.from('club_signups').delete().eq('id', signupId).select('id').maybeSingle()
+    if (error) throw error
+    if (!data) throw new Error('Påmeldingen kunne ikke slettes. Oppdater listen og prøv igjen.')
+  }
+
+  const signups = await loadLocalClubSignups()
+  await cacheClubSignups(signups.filter((signup) => signup.id !== signupId))
 }
 
 export async function savePlayers(names: string[]): Promise<void> {

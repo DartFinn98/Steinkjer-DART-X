@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { getCheckoutHint } from './checkout'
-import { deleteSavedMatch, deleteSavedPlayer, loadSavedData, saveFinishedMatch, savePlayers, sendMatchReport, syncPendingChanges } from './database'
-import type { SavedData } from './database'
+import { deleteClubSignup, deleteSavedMatch, deleteSavedPlayer, loadClubSignups, loadSavedData, saveClubSignup, saveFinishedMatch, savePlayers, sendMatchReport, syncPendingChanges } from './database'
+import type { ClubSignup, SavedData } from './database'
 import { supabase } from './supabase'
 import type { Session } from '@supabase/supabase-js'
 import { summarizePlayer } from './stats'
@@ -17,6 +17,7 @@ type Player = { id: string; name: string; score: number; visits: Visit[]; teamId
 type Snapshot = { players: Player[]; activePlayer: number; winnerId: string | null; legsWon: Record<string, number>; matchWinnerId: string | null }
 type EntryMode = 'darts' | 'total'
 type GamePhase = 'setup' | 'bull-off' | 'leg-bull-off' | 'playing'
+type AppSection = 'scoreboard' | 'club-evenings'
 type CoinSide = 'kron' | 'mynt'
 type CourtNumber = 1 | 2 | 3 | 4 | 5
 
@@ -145,7 +146,28 @@ function formatSavedVisit(visit: SavedData['matches'][number]['players'][number]
   return visit.darts ? visit.darts.join(' + ') : `${visit.total} poeng · manuelt`
 }
 
+function getUpcomingClubDates(): string[] {
+  const dates: string[] = []
+  const date = new Date()
+  date.setHours(12, 0, 0, 0)
+  for (let offset = 0; offset < 42 && dates.length < 8; offset += 1) {
+    const weekday = date.getDay()
+    if (weekday === 1 || weekday === 4) {
+      dates.push(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`)
+    }
+    date.setDate(date.getDate() + 1)
+  }
+  return dates
+}
+
+function formatClubDate(date: string): string {
+  const formattedDate = new Intl.DateTimeFormat('nb-NO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+    .format(new Date(`${date}T12:00:00`))
+  return `${formattedDate.charAt(0).toLocaleUpperCase('nb-NO')}${formattedDate.slice(1)}`
+}
+
 function App() {
+  const [appSection, setAppSection] = useState<AppSection>('scoreboard')
   const [playerCount, setPlayerCount] = useState(2)
   const [gameMode, setGameMode] = useState<GameMode>('501')
   const [teamMode, setTeamMode] = useState(false)
@@ -200,6 +222,16 @@ function App() {
   const [emailReportMessage, setEmailReportMessage] = useState('')
   const [isOnline, setIsOnline] = useState(() => navigator.onLine)
   const [reopenedMatchId, setReopenedMatchId] = useState<string | null>(null)
+  const [clubSignups, setClubSignups] = useState<ClubSignup[]>([])
+  const [clubSignupDate, setClubSignupDate] = useState(() => getUpcomingClubDates()[0])
+  const [clubSignupName, setClubSignupName] = useState('')
+  const [clubSignupMessage, setClubSignupMessage] = useState('')
+  const [clubSignupBusy, setClubSignupBusy] = useState(false)
+
+  const upcomingClubDates = getUpcomingClubDates()
+  const currentClubSignup = clubSignups.find((signup) => signup.eventDate === clubSignupDate && (
+    supabase ? signup.signedUpBy === session?.user.id : signup.playerName.toLocaleLowerCase('nb-NO') === clubSignupName.trim().toLocaleLowerCase('nb-NO')
+  ))
 
   useEffect(() => {
     try {
@@ -252,6 +284,20 @@ function App() {
     })
     return () => { mounted = false }
   }, [session])
+
+  useEffect(() => {
+    if (appSection !== 'club-evenings' || (supabase && !session)) return
+    let mounted = true
+    void loadClubSignups().then((signups) => {
+      if (mounted) {
+        setClubSignups(signups)
+        setClubSignupMessage('')
+      }
+    }).catch(() => {
+      if (mounted) setClubSignupMessage('Kunne ikke hente påmeldingene. Kontroller at påmeldingstabellen er satt opp i Supabase, og prøv igjen.')
+    })
+    return () => { mounted = false }
+  }, [appSection, session, isOnline])
 
   useEffect(() => {
     const handleOffline = () => {
@@ -904,15 +950,70 @@ function App() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <a className="brand" href="/" aria-label="Steinkjer DART-X, tilbake til start" onClick={(event) => { event.preventDefault(); newGame() }}>
+        <a className="brand" href="/" aria-label="Steinkjer DART-X, tilbake til start" onClick={(event) => { event.preventDefault(); setAppSection('scoreboard'); newGame() }}>
           <img className="brand-logo" src="/logo.png" alt="" />
           <span>STEINKJER <span className="brand-dot">DART-X</span></span>
         </a>
-        <div className="topbar-meta">{isOnline ? <span className="live-dot" /> : <span className="offline-dot" />} {isOnline ? gameMode === 'cricket' ? 'CRICKET' : `${gameMode} / DOBBEL UT` : 'OFFLINE'} <span className="court-indicator">BANE {courtNumber}</span> {session && <button className="sign-out-button" type="button" onClick={signOut}>Logg ut</button>}{!supabase && <span className="local-mode-tag">LOKAL MODUS</span>}</div>
+        <div className="topbar-actions">
+          <div className="topbar-meta">{isOnline ? <span className="live-dot" /> : <span className="offline-dot" />} {isOnline ? gameMode === 'cricket' ? 'CRICKET' : `${gameMode} / DOBBEL UT` : 'OFFLINE'} <span className="court-indicator">BANE {courtNumber}</span>{!supabase && <span className="local-mode-tag">LOKAL MODUS</span>}</div>
+          <button className="club-menu-button" type="button" aria-current={appSection === 'club-evenings' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'club-evenings' ? 'scoreboard' : 'club-evenings')}>{appSection === 'club-evenings' ? 'Poengtavle' : 'Påmelding'}</button>
+          {session && <button className="sign-out-button" type="button" onClick={signOut}>Logg ut</button>}
+        </div>
       </header>
       {databaseMessage && <div className="database-message" role="status"><span>{databaseMessage}</span><button type="button" aria-label="Skjul varsel" onClick={() => setDatabaseMessage('')}>Lukk</button></div>}
 
-      {players.length === 0 ? (
+      {appSection === 'club-evenings' ? (
+        <section className="club-evenings-page">
+          <div className="club-evenings-heading">
+            <p className="eyebrow">STEINKJER DART-X / KLUBB</p>
+            <h1>Påmelding<span className="title-period">.</span></h1>
+            <p className="intro">Meld deg på klubbkvelden og se hvem som blir med.</p>
+          </div>
+          <section className="club-registration-card">
+            <p className="eyebrow">MANDAG OG TORSDAG</p>
+            <h2>Velg klubbkveld</h2>
+            <label className="club-signup-field"><span>DATO</span><select value={clubSignupDate} onChange={(event) => { setClubSignupDate(event.target.value); setClubSignupMessage('') }}>{upcomingClubDates.map((date) => <option key={date} value={date}>{formatClubDate(date)}</option>)}</select></label>
+            <form className="club-signup-form" onSubmit={(event) => {
+              event.preventDefault()
+              setClubSignupBusy(true)
+              setClubSignupMessage('')
+              void saveClubSignup(clubSignupDate, clubSignupName, session?.user.id).then(() => loadClubSignups()).then((signups) => {
+                setClubSignups(signups)
+                setClubSignupName('')
+                setClubSignupMessage('Du er påmeldt.')
+              }).catch((error: unknown) => {
+                setClubSignupMessage(error instanceof Error ? error.message : 'Påmeldingen kunne ikke lagres. Prøv igjen.')
+              }).finally(() => setClubSignupBusy(false))
+            }}>
+              <label className="club-signup-field"><span>NAVN</span><input autoComplete="name" maxLength={24} required value={clubSignupName} onChange={(event) => setClubSignupName(event.target.value)} placeholder="Skriv inn navnet ditt" /></label>
+              <button className="primary-button club-signup-submit" type="submit" disabled={clubSignupBusy || !clubSignupName.trim() || (Boolean(supabase) && !isOnline)}>{clubSignupBusy ? 'LAGRER …' : currentClubSignup ? 'Oppdater påmelding' : 'Meld meg på'}<span aria-hidden="true">↗</span></button>
+            </form>
+            {currentClubSignup && <button className="club-cancel-button" type="button" disabled={clubSignupBusy || (Boolean(supabase) && !isOnline)} onClick={() => {
+              setClubSignupBusy(true)
+              setClubSignupMessage('')
+              void deleteClubSignup(currentClubSignup.id).then(() => loadClubSignups()).then(setClubSignups).then(() => {
+                setClubSignupMessage('Du er meldt av.')
+              }).catch((error: unknown) => {
+                setClubSignupMessage(error instanceof Error ? error.message : 'Avmeldingen kunne ikke lagres. Prøv igjen.')
+              }).finally(() => setClubSignupBusy(false))
+            }}>Meld meg av</button>}
+            {clubSignupMessage && <p className="club-signup-message" role="status">{clubSignupMessage}</p>}
+            {supabase && !isOnline && <p className="club-signup-message">Du må være på nett for å endre påmeldingen.</p>}
+            <div className="club-attendees"><h3>Påmeldte <span>{clubSignups.filter((signup) => signup.eventDate === clubSignupDate).length}</span></h3>
+              {clubSignups.some((signup) => signup.eventDate === clubSignupDate)
+                ? <ul>{clubSignups.filter((signup) => signup.eventDate === clubSignupDate).map((signup) => <li key={signup.id}>{signup.playerName}{!supabase && <button type="button" aria-label={`Meld ${signup.playerName} av`} disabled={clubSignupBusy} onClick={() => {
+                  setClubSignupBusy(true)
+                  setClubSignupMessage('')
+                  void deleteClubSignup(signup.id).then(() => loadClubSignups()).then(setClubSignups).catch((error: unknown) => {
+                    setClubSignupMessage(error instanceof Error ? error.message : 'Avmeldingen kunne ikke lagres. Prøv igjen.')
+                  }).finally(() => setClubSignupBusy(false))
+                }}>Meld av</button>}</li>)}</ul>
+                : <p>Ingen er påmeldt ennå.</p>}
+            </div>
+            {!supabase && <p className="club-local-note">Påmeldingene lagres bare på denne enheten i lokal modus.</p>}
+          </section>
+        </section>
+      ) : players.length === 0 ? (
         <section className="setup-layout">
           <div className="setup-copy">
             <p className="eyebrow">KAMPROM / 01</p>

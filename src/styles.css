@@ -31,6 +31,32 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .topbar-meta { display: flex; align-items: center; gap: 9px; color: var(--muted); }
 .topbar-meta .sign-out-button { min-height: 30px; padding: 0 9px; border: 1px solid var(--line); background: transparent; color: var(--green); font-size: 10px; font-weight: 700; cursor: pointer; }
 .topbar-meta .sign-out-button:hover { border-color: var(--green); }
+.topbar-actions { display: flex; align-items: center; gap: 12px; }
+.club-menu-button { min-height: 35px; padding: 0 13px; border: 1px solid var(--green); background: var(--green); color: white; font-size: 12px; font-weight: 700; cursor: pointer; }
+.club-menu-button:hover { background: var(--green-dark); }
+.club-menu-button[aria-current="page"] { border-color: var(--line); background: transparent; color: var(--green); }
+.club-evenings-page { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 390px); align-items: center; gap: 8vw; max-width: 1180px; min-height: calc(100vh - 180px); margin: 0 auto; padding: 50px 0 75px; }
+.club-evenings-heading h1 { margin: 0; font-family: var(--serif); font-size: clamp(52px, 9vw, 108px); font-weight: 500; line-height: .98; }
+.club-evenings-heading .intro { margin-top: 24px; }
+.club-registration-card { padding: 27px 29px; border: 1px solid #d0d0c6; background: #f8f6efeb; box-shadow: 9px 10px 0 #175c450e; }
+.club-registration-card .eyebrow { margin-bottom: 8px; }
+.club-registration-card h2 { margin: 0 0 19px; font-family: var(--serif); font-size: 30px; font-weight: 500; }
+.club-signup-field { display: grid; gap: 7px; margin-bottom: 13px; }
+.club-signup-field > span { color: var(--muted); font: 10px var(--mono); letter-spacing: 1px; }
+.club-signup-field input, .club-signup-field select { width: 100%; min-width: 0; min-height: 43px; padding: 0 10px; border: 1px solid var(--line); border-radius: 0; background: #fffefa; color: var(--ink); font-size: 13px; }
+.club-signup-form { display: grid; gap: 1px; }
+.club-signup-submit { width: 100%; margin-top: 1px; }
+.club-cancel-button, .club-attendees li button { min-height: 30px; padding: 0 8px; border: 1px solid var(--line); background: transparent; color: var(--green); font-size: 11px; cursor: pointer; }
+.club-cancel-button { margin-top: 9px; }
+.club-cancel-button:disabled, .club-attendees li button:disabled { cursor: not-allowed; opacity: .55; }
+.club-signup-message, .club-local-note { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.club-attendees { margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--line); }
+.club-attendees h3 { display: flex; justify-content: space-between; margin: 0 0 10px; font-size: 13px; }
+.club-attendees h3 span { color: var(--green); font-family: var(--mono); }
+.club-attendees > p { color: var(--muted); font-size: 12px; }
+.club-attendees ul { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.club-attendees li { display: flex; align-items: center; justify-content: space-between; gap: 9px; color: var(--ink); font-size: 12px; }
+.club-local-note { margin: 16px 0 0; }
 .court-indicator { padding: 4px 6px; border: 1px solid var(--line); color: var(--green); font: 9px var(--mono); white-space: nowrap; }
 .local-mode-tag { padding: 4px 6px; border: 1px solid var(--line); color: var(--muted); font-size: 8px; }
 .offline-dot { display: inline-block; width: 7px; aspect-ratio: 1; border-radius: 50%; background: var(--orange); box-shadow: 0 0 0 3px #ec68481c; }
@@ -329,9 +355,13 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 @keyframes coin-spin-mynt { from { transform: rotateY(0deg); } to { transform: rotateY(1980deg); } }
 @keyframes rise-in { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
 @media (max-width: 760px) {
+  .club-evenings-page { grid-template-columns: minmax(0, 1fr); gap: 24px; min-height: auto; padding: 40px 0 55px; }
   .app-shell { padding: 0 22px 32px; }
   .topbar { min-height: 65px; }
-  .topbar-meta { font-size: 8px; }
+  .topbar-actions { gap: 6px; }
+  .topbar-meta { display: none; }
+  .topbar-actions .sign-out-button { min-height: 30px; padding: 0 7px; font-size: 9px; }
+  .club-menu-button { min-height: 32px; padding: 0 9px; font-size: 11px; }
   .setup-layout { min-height: auto; grid-template-columns: 1fr; gap: 19px; padding: 30px 0 28px; }
   .bull-off-layout { min-height: auto; grid-template-columns: 1fr; gap: 21px; padding: 32px 0 28px; }
   .auth-layout { min-height: auto; grid-template-columns: 1fr; gap: 22px; padding: 34px 0; }

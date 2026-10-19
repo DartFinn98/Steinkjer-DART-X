@@ -2,7 +2,7 @@
 
 Norsk poengtavle for 501, Cricket og 121-utgang med stålpiler. Spill individuelt med én til fire spillere, eller dobbel i 2 mot 2. Lagkamerater deler poengsum og Cricket-felt og kaster annenhver tur. Velg bane 1–5; banevalget huskes på mini-PC-en og lagres med kampresultatet. Avsluttede kamper finnes i et søkbart kamparkiv med spillerstatistikk og registrerte turer. Velg best av 3, 5, 7 eller 9 legger, og registrer kastene enkeltvis eller som en totalsum. Trykk på poengsummen for å rette den; bruk Angre for å rulle tilbake en retting eller et kast. Steinkjer DART-X håndterer bust og dobbel ut, viser legg- og kampresultater og kan installeres som en nettapp.
 
-Spillernavn kan legges til, velges og slettes fra spillerlisten. Når Supabase er konfigurert, deler innloggede brukere spillerlisten og kampresultatene. På en enhet der appen allerede er åpnet på nett, kan den også brukes offline. Lokale endringer lagres på enheten og synkroniseres når forbindelsen kommer tilbake; e-postrapporter legges også i kø. Uten Supabase lagres data bare lokalt i nettleseren. Sletting av en spillerprofil fjerner ikke tidligere kampresultater.
+Spillernavn kan legges til, velges og slettes fra spillerlisten. Knappen **Påmelding** åpner påmelding til kommende mandags- og torsdagskvelder. Med Supabase lagres påmeldingene delt, og hver innloggede bruker kan endre eller slette sin egen påmelding. Uten Supabase lagres de lokalt i nettleseren. Påmelding krever nett når Supabase er konfigurert. På en enhet der appen allerede er åpnet på nett, kan den også brukes offline. Lokale kampendringer lagres på enheten og synkroniseres når forbindelsen kommer tilbake; e-postrapporter legges også i kø. Sletting av en spillerprofil fjerner ikke tidligere kampresultater.
 
 ## Kom i gang
 
