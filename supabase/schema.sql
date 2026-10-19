@@ -211,6 +211,185 @@ create policy "Club admins can manage tournaments"
 
 grant select, insert, update, delete on public.club_tournaments to authenticated;
 
+create or replace function public.update_club_tournament_match(
+  target_event_date date,
+  target_match_id text,
+  operation text,
+  progress jsonb default null,
+  progress_id text default null,
+  player_one_legs integer default null,
+  player_two_legs integer default null
+)
+returns public.club_tournaments
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  tournament_row public.club_tournaments%rowtype;
+  match_data jsonb;
+  match_position integer := -1;
+  current_position integer;
+  legs_to_win integer;
+  winner_signup_id text;
+begin
+  if not public.is_club_admin() then
+    raise exception 'Administrator access required' using errcode = '42501';
+  end if;
+
+  select * into tournament_row
+  from public.club_tournaments
+  where event_date = target_event_date
+  for update;
+  if not found then
+    raise exception 'Turneringen ble ikke funnet.';
+  end if;
+
+  for current_position in 0..jsonb_array_length(tournament_row.matches) - 1 loop
+    if tournament_row.matches -> current_position ->> 'id' = target_match_id then
+      match_position := current_position;
+      exit;
+    end if;
+  end loop;
+  if match_position < 0 then
+    raise exception 'Turneringskampen ble ikke funnet.';
+  end if;
+
+  match_data := tournament_row.matches -> match_position;
+  if (match_data ->> 'winnerSignupId') is not null then
+    raise exception 'Turneringskampen er allerede avgjort.';
+  end if;
+
+  if operation = 'save-progress' then
+    if jsonb_typeof(progress) <> 'object'
+      or jsonb_array_length(coalesce(progress -> 'players', '[]'::jsonb)) <> 2
+      or coalesce(progress ->> 'progressId', '') = '' then
+      raise exception 'Ugyldig kampframdrift.';
+    end if;
+    if not (match_data ? 'inProgress') and (
+      select count(*)
+      from jsonb_array_elements(tournament_row.matches) as active_match(value)
+      where active_match.value ? 'inProgress'
+    ) >= 5 then
+      raise exception 'Alle fem banene er i bruk. Vent til en kamp er ferdig.';
+    end if;
+    if coalesce(match_data #>> '{inProgress,progressId}', '') <> ''
+      and (match_data #>> '{inProgress,progressId}') <> (progress ->> 'progressId') then
+      raise exception 'Denne turneringskampen er allerede startet på en annen bane.';
+    end if;
+    match_data := jsonb_set(match_data, '{inProgress}', progress, true);
+  elsif operation = 'finish-match' then
+    if coalesce(match_data #>> '{inProgress,progressId}', '') <> ''
+      and (match_data #>> '{inProgress,progressId}') <> coalesce(progress_id, '') then
+      raise exception 'Turneringskampen er startet på en annen bane.';
+    end if;
+    legs_to_win := (match_data ->> 'bestOfLegs')::integer / 2 + 1;
+    if player_one_legs is null
+      or player_two_legs is null
+      or player_one_legs < 0
+      or player_two_legs < 0
+      or player_one_legs > legs_to_win
+      or player_two_legs > legs_to_win
+      or player_one_legs = player_two_legs
+      or greatest(player_one_legs, player_two_legs) <> legs_to_win then
+      raise exception 'Ugyldig turneringsresultat.';
+    end if;
+    winner_signup_id := case
+      when player_one_legs > player_two_legs then match_data ->> 'playerOneSignupId'
+      else match_data ->> 'playerTwoSignupId'
+    end;
+    match_data := (match_data - 'inProgress') || jsonb_build_object(
+      'playerOneLegs', player_one_legs,
+      'playerTwoLegs', player_two_legs,
+      'winnerSignupId', winner_signup_id
+    );
+  else
+    raise exception 'Ukjent handling for turneringskamp.';
+  end if;
+
+  tournament_row.matches := jsonb_set(
+    tournament_row.matches,
+    array[match_position::text],
+    match_data,
+    false
+  );
+  tournament_row.updated_at := now();
+  update public.club_tournaments
+  set matches = tournament_row.matches,
+      updated_at = tournament_row.updated_at
+  where event_date = target_event_date
+  returning * into tournament_row;
+
+  return tournament_row;
+end;
+$$;
+
+create or replace function public.add_club_tournament_cup_round(
+  target_event_date date,
+  target_round smallint,
+  round_matches jsonb
+)
+returns public.club_tournaments
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  tournament_row public.club_tournaments%rowtype;
+  current_round_matches jsonb;
+begin
+  if not public.is_club_admin() then
+    raise exception 'Administrator access required' using errcode = '42501';
+  end if;
+
+  select * into tournament_row
+  from public.club_tournaments
+  where event_date = target_event_date
+  for update;
+  if not found then
+    raise exception 'Turneringen ble ikke funnet.';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(tournament_row.matches) as existing_match(value)
+    where existing_match.value ->> 'phase' = 'cup'
+      and (existing_match.value ->> 'roundNumber')::integer = target_round
+  ) then
+    return tournament_row;
+  end if;
+
+  select coalesce(jsonb_agg(current_match.value), '[]'::jsonb)
+  into current_round_matches
+  from jsonb_array_elements(tournament_row.matches) as current_match(value)
+  where current_match.value ->> 'phase' = 'cup'
+    and (current_match.value ->> 'roundNumber')::integer = target_round - 1;
+  if jsonb_array_length(current_round_matches) < 2
+    or exists (
+      select 1
+      from jsonb_array_elements(current_round_matches) as current_match(value)
+      where coalesce(current_match.value ->> 'winnerSignupId', '') = ''
+    ) then
+    raise exception 'Fullfør forrige cuprunde før neste runde opprettes.';
+  end if;
+  if jsonb_typeof(round_matches) <> 'array' or jsonb_array_length(round_matches) = 0 then
+    raise exception 'Ugyldig neste cuprunde.';
+  end if;
+
+  update public.club_tournaments
+  set matches = matches || round_matches,
+      cup_round = target_round,
+      updated_at = now()
+  where event_date = target_event_date
+  returning * into tournament_row;
+
+  return tournament_row;
+end;
+$$;
+
+revoke all on function public.update_club_tournament_match(date, text, text, jsonb, text, integer, integer) from public;
+revoke all on function public.add_club_tournament_cup_round(date, smallint, jsonb) from public;
+grant execute on function public.update_club_tournament_match(date, text, text, jsonb, text, integer, integer) to authenticated;
+grant execute on function public.add_club_tournament_cup_round(date, smallint, jsonb) to authenticated;
+
 drop policy if exists "Members can manage their own player profile link" on public.member_player_profiles;
 create policy "Members can manage their own player profile link"
   on public.member_player_profiles

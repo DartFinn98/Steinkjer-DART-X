@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { getCheckoutHint } from './checkout'
-import { deleteAllClubTournaments, deleteClubSignup, deleteClubTournament, deleteSavedMatch, deleteSavedPlayer, loadClubAdminStatus, loadClubAdmins, loadClubSignups, loadClubTournaments, loadLinkedPlayerProfile, loadSavedData, saveClubSignup, saveClubTournament, saveFinishedMatch, saveLinkedPlayerId, savePlayers, sendMatchReport, setClubAdminRole, syncPendingChanges, updateClubSignup, uploadProfileAvatar } from './database'
+import { addTournamentCupRound, deleteAllClubTournaments, deleteClubSignup, deleteClubTournament, deleteSavedMatch, deleteSavedPlayer, finishTournamentMatch, loadClubAdminStatus, loadClubAdmins, loadClubSignups, loadClubTournaments, loadLinkedPlayerProfile, loadSavedData, saveClubSignup, saveClubTournament, saveFinishedMatch, saveLinkedPlayerId, savePlayers, saveTournamentMatchProgress, sendMatchReport, setClubAdminRole, syncPendingChanges, updateClubSignup, uploadProfileAvatar } from './database'
 import type { ClubAdmin, ClubSignup, ClubTournament, SavedData, TournamentGameHistory, TournamentMatch, TournamentMatchProgress, TournamentGamePlayer } from './database'
 import { supabase } from './supabase'
 import type { Session } from '@supabase/supabase-js'
 import { summarizePlayer } from './stats'
 import { applyCricketVisit, CRICKET_TARGETS, hasWonCricket } from './cricket'
 import type { CricketDart, CricketMarks } from './cricket'
-import { createNextCupRound, drawClubPools, getPoolStandings, setTournamentAdvancement, updateTournamentMatchResult } from './tournament'
+import { createNextCupRound, drawClubPools, getPoolStandings, setTournamentAdvancement } from './tournament'
 
 type DartInputs = [string, string, string]
 type ScoredDart = { points: number; isDouble: boolean; target: number | null; marks: number }
@@ -17,6 +17,7 @@ type ActiveTournamentMatch = {
   matchId: string
   playerOneId: string
   playerTwoId: string
+  progressId: string
 }
 type GameMode = '501' | 'cricket' | '121'
 type Player = TournamentGamePlayer
@@ -46,6 +47,19 @@ function getSavedCourtNumber(): CourtNumber {
     return 1
   }
 }
+
+function tournamentErrorMessage(error: unknown, fallback: string): string {
+  const message = error instanceof Error ? error.message : ''
+  if (message.includes('All five boards are already in use.')) {
+    return 'Alle fem banene er i bruk. Vent til en kamp er ferdig.'
+  }
+  if (message.includes('This tournament match is already active on another board.')
+    || message.includes('This tournament match is active on another board.')) {
+    return 'Denne turneringskampen er allerede startet på en annen bane.'
+  }
+  return message || fallback
+}
+
 type CoinTossButtonProps = {
   disabled: boolean
   flipping: boolean
@@ -130,6 +144,7 @@ function TournamentBoard({
     ? Array.from(new Set(tournament.participants.flatMap((participant) => participant.poolNumber === null ? [] : [participant.poolNumber]))).sort((first, second) => first - second)
     : []
   const poolMatches = tournament?.matches.filter((match) => match.phase === 'pool') ?? []
+  const activeMatchCount = tournament?.matches.filter((match) => match.inProgress).length ?? 0
   const poolsComplete = poolMatches.length > 0 && poolMatches.every((match) => match.winnerSignupId !== null)
   const cupMatches = tournament?.matches.filter((match) => match.phase === 'cup') ?? []
   const cupRoundMatches = tournament && cupMatches.length > 0
@@ -148,6 +163,7 @@ function TournamentBoard({
       <div><p className="eyebrow">PULJER OG CUP</p><h2>Turnering</h2></div>
       <label className="admin-export-select"><span>KLUBBKVELD</span><select value={eventDate} onChange={(event) => onEventDateChange(event.target.value)}>{eventDates.map((date) => <option key={date} value={date}>{formatClubDate(date)}</option>)}</select></label>
       <div className="tournament-heading-actions">
+        {tournament && activeMatchCount > 0 && <p className="tournament-active-count" role="status">{activeMatchCount} / 5 kamper pågår på banene</p>}
         {tournament && isAdmin && <button className="tournament-print-button" type="button" onClick={() => window.print()}>Skriv ut skjemaer</button>}
         {!tournament && isAdmin && <button className="primary-button admin-export-button" type="button" disabled={busy || signups.length < 2} onClick={onDraw}>Trekk puljer</button>}
       </div>
@@ -755,6 +771,26 @@ function App() {
   }, [appSection, session, isOnline])
 
   useEffect(() => {
+    if ((appSection !== 'admin' && appSection !== 'tournament') || !session || !isOnline) return
+    let mounted = true
+    const refreshTournaments = async () => {
+      try {
+        const tournaments = await loadClubTournaments()
+        if (!mounted) return
+        clubTournamentsRef.current = tournaments
+        setClubTournaments(tournaments)
+      } catch (error) {
+        console.error('Could not refresh tournament matches:', error)
+      }
+    }
+    const interval = window.setInterval(() => { void refreshTournaments() }, 5000)
+    return () => {
+      mounted = false
+      window.clearInterval(interval)
+    }
+  }, [appSection, isOnline, session])
+
+  useEffect(() => {
     const handleOffline = () => {
       setIsOnline(false)
       setDatabaseMessage(supabase
@@ -997,6 +1033,7 @@ function App() {
   ) {
     if (!activeTournamentMatch) return
     const progress: TournamentMatchProgress = {
+      progressId: activeTournamentMatch.progressId,
       players,
       activePlayer,
       legsWon,
@@ -1523,7 +1560,10 @@ function App() {
 
   async function removeTournament(eventDate: string) {
     if (!isClubAdmin) return
-    if (activeTournamentMatch?.eventDate === eventDate) {
+    const tournamentHasActiveMatch = clubTournamentsRef.current
+      .find((tournament) => tournament.eventDate === eventDate)
+      ?.matches.some((match) => match.inProgress) ?? false
+    if (activeTournamentMatch?.eventDate === eventDate || tournamentHasActiveMatch) {
       showTournamentError('Avslutt turneringskampen før du sletter denne turneringen.')
       return
     }
@@ -1545,7 +1585,7 @@ function App() {
 
   async function removeAllTournaments() {
     if (!isClubAdmin) return
-    if (activeTournamentMatch) {
+    if (activeTournamentMatch || clubTournamentsRef.current.some((tournament) => tournament.matches.some((match) => match.inProgress))) {
       showTournamentError('Avslutt turneringskampen før du sletter alle turneringene.')
       return
     }
@@ -1588,18 +1628,7 @@ function App() {
     progress: TournamentMatchProgress,
   ): Promise<void> {
     const saveOperation = tournamentProgressSaveQueue.current.catch(() => undefined).then(async () => {
-      const tournament = clubTournamentsRef.current.find((item) => item.eventDate === activeMatch.eventDate)
-      if (!tournament) throw new Error('Turneringen ble ikke funnet.')
-      const matchExists = tournament.matches.some((match) => match.id === activeMatch.matchId && match.winnerSignupId === null)
-      if (!matchExists) throw new Error('Turneringskampen finnes ikke lenger eller er allerede avgjort.')
-      const updatedTournament = {
-        ...tournament,
-        matches: tournament.matches.map((match) => match.id === activeMatch.matchId
-          ? { ...match, inProgress: progress }
-          : match),
-        updatedAt: new Date().toISOString(),
-      }
-      await saveClubTournament(updatedTournament)
+      const updatedTournament = await saveTournamentMatchProgress(activeMatch.eventDate, activeMatch.matchId, progress)
       const updatedTournaments = [...clubTournamentsRef.current.filter((item) => item.eventDate !== updatedTournament.eventDate), updatedTournament]
         .sort((first, second) => first.eventDate.localeCompare(second.eventDate))
       clubTournamentsRef.current = updatedTournaments
@@ -1607,9 +1636,7 @@ function App() {
       setTournamentMatchMessage('Kampen lagres automatisk mens dere spiller.')
     })
     tournamentProgressSaveQueue.current = saveOperation.catch((error: unknown) => {
-      setTournamentMatchMessage(error instanceof Error
-        ? `Kampen kunne ikke lagres for gjenopptakelse: ${error.message}`
-        : 'Kampen kunne ikke lagres for gjenopptakelse.')
+      setTournamentMatchMessage(`Kampen kunne ikke lagres for gjenopptakelse: ${tournamentErrorMessage(error, 'Ukjent lagringsfeil.')}`)
     })
     return saveOperation
   }
@@ -1644,9 +1671,10 @@ function App() {
     setTournamentMessageIsError(false)
     setTournamentMatchMessage('Lagrer turneringsresultatet …')
     try {
-      let updatedTournament = updateTournamentMatchResult(
-        tournament,
+      let updatedTournament = await finishTournamentMatch(
+        activeMatch.eventDate,
         activeMatch.matchId,
+        activeMatch.progressId,
         playerOneLegs,
         playerTwoLegs,
       )
@@ -1658,10 +1686,15 @@ function App() {
         if (currentRoundMatches.length > 1
           && currentRoundMatches.every((item) => item.winnerSignupId !== null)
           && !nextRoundAlreadyExists) {
-          updatedTournament = createNextCupRound(updatedTournament)
+          const nextRoundTournament = createNextCupRound(updatedTournament)
+          const nextRoundMatches = nextRoundTournament.matches.filter((item) => item.roundNumber === match.roundNumber + 1)
+          updatedTournament = await addTournamentCupRound(
+            activeMatch.eventDate,
+            match.roundNumber + 1,
+            nextRoundMatches,
+          )
         }
       }
-      await saveClubTournament(updatedTournament)
       const updatedTournaments = [...clubTournamentsRef.current.filter((item) => item.eventDate !== updatedTournament.eventDate), updatedTournament]
         .sort((first, second) => first.eventDate.localeCompare(second.eventDate))
       clubTournamentsRef.current = updatedTournaments
@@ -1669,8 +1702,8 @@ function App() {
       setActiveTournamentMatch(null)
       setTournamentMatchMessage('Turneringsresultatet er registrert automatisk.')
     } catch (error) {
-      const details = error instanceof Error ? error.message : 'Ukjent lagringsfeil.'
-      setTournamentMatchMessage(`Kampen er ferdig, men turneringsresultatet kunne ikke lagres. ${details}`)
+      const details = tournamentErrorMessage(error, 'Ukjent lagringsfeil.')
+      setTournamentMatchMessage(`Kampen er ferdig, men turneringsresultatet eller neste cuprunde kunne ikke lagres. ${details}`)
     } finally {
       setTournamentBusy(false)
     }
@@ -1678,7 +1711,10 @@ function App() {
 
   function restoreTournamentMatch(match: TournamentMatch) {
     if (!selectedTournament || !match.inProgress || !isClubAdmin) return
-    const progress = match.inProgress
+    const progress = {
+      ...match.inProgress,
+      progressId: match.inProgress.progressId ?? `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+    }
     if (progress.players.length !== 2 || progress.activePlayer < 0 || progress.activePlayer > 1) {
       showTournamentError('Den lagrede kampstillingen er ugyldig og kan ikke gjenopptas.')
       return
@@ -1688,6 +1724,7 @@ function App() {
       matchId: match.id,
       playerOneId: progress.players[0].id,
       playerTwoId: progress.players[1].id,
+      progressId: progress.progressId,
     })
     setPlayers(progress.players)
     setPlayerNames(progress.players.map((player) => player.name))
@@ -1742,8 +1779,10 @@ function App() {
       matchId: match.id,
       playerOneId,
       playerTwoId,
+      progressId: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
     }
     const initialProgress: TournamentMatchProgress = {
+      progressId: activeMatch.progressId,
       players: matchPlayers,
       activePlayer: 0,
       legsWon: { [playerOneId]: 0, [playerTwoId]: 0 },
@@ -1761,9 +1800,7 @@ function App() {
     try {
       await persistTournamentMatchProgress(activeMatch, initialProgress)
     } catch (error) {
-      showTournamentError(error instanceof Error
-        ? `Kampen kunne ikke startes fordi stillingen ikke ble lagret: ${error.message}`
-        : 'Kampen kunne ikke startes fordi stillingen ikke ble lagret.')
+      showTournamentError(`Kampen kunne ikke startes fordi stillingen ikke ble lagret: ${tournamentErrorMessage(error, 'Ukjent lagringsfeil.')}`)
       return
     } finally {
       setTournamentBusy(false)
@@ -1773,6 +1810,7 @@ function App() {
       matchId: match.id,
       playerOneId,
       playerTwoId,
+      progressId: activeMatch.progressId,
     })
     setTournamentMatchMessage('')
     setPlayers(matchPlayers)
@@ -1963,7 +2001,7 @@ function App() {
             signups={currentTournamentSignups}
             seedRanks={tournamentSeedRanks}
             busy={tournamentBusy}
-            canPlayMatch={(players.length === 0 || matchWinnerId !== null) && !activeTournamentMatch && !clubTournaments.some((item) => item.matches.some((match) => match.inProgress))}
+            canPlayMatch={(players.length === 0 || matchWinnerId !== null) && !activeTournamentMatch && (selectedTournament?.matches.filter((match) => match.inProgress).length ?? 0) < 5}
             canResumeMatch={(players.length === 0 || matchWinnerId !== null) && !activeTournamentMatch}
             isAdmin
             message={tournamentMessage}
@@ -2009,7 +2047,7 @@ function App() {
             signups={currentTournamentSignups}
             seedRanks={tournamentSeedRanks}
             busy={tournamentBusy}
-            canPlayMatch={(players.length === 0 || matchWinnerId !== null) && !activeTournamentMatch && !clubTournaments.some((item) => item.matches.some((match) => match.inProgress))}
+            canPlayMatch={(players.length === 0 || matchWinnerId !== null) && !activeTournamentMatch && (selectedTournament?.matches.filter((match) => match.inProgress).length ?? 0) < 5}
             canResumeMatch={(players.length === 0 || matchWinnerId !== null) && !activeTournamentMatch}
             isAdmin={isClubAdmin}
             message={tournamentMessage}

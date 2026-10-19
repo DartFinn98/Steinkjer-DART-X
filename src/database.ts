@@ -73,6 +73,7 @@ export type TournamentGameHistory = {
 }
 
 export type TournamentMatchProgress = {
+  progressId?: string
   players: TournamentGamePlayer[]
   activePlayer: number
   legsWon: Record<string, number>
@@ -467,6 +468,94 @@ export async function loadClubTournaments(): Promise<ClubTournament[]> {
     createdAt: tournament.created_at,
     updatedAt: tournament.updated_at,
   }))
+}
+
+type ClubTournamentRow = {
+  event_date: string
+  participants: TournamentParticipant[]
+  matches: TournamentMatch[]
+  cup_round: number
+  created_at: string
+  updated_at: string
+}
+
+function mapClubTournamentRow(row: ClubTournamentRow): ClubTournament {
+  return {
+    eventDate: row.event_date,
+    participants: row.participants,
+    matches: row.matches,
+    cupRound: row.cup_round,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+async function updateTournamentMatch(
+  args: {
+    target_event_date: string
+    target_match_id: string
+    operation: 'save-progress' | 'finish-match'
+    progress?: TournamentMatchProgress
+    progress_id?: string
+    player_one_legs?: number
+    player_two_legs?: number
+  },
+): Promise<ClubTournament> {
+  if (!supabase) throw new Error('Supabase er ikke konfigurert.')
+  if (!navigator.onLine) throw new Error('Du må være på nett for å lagre turneringskampen.')
+  const { data, error } = await supabase.rpc('update_club_tournament_match', args)
+  if (error) throw error
+  const row = Array.isArray(data) ? data.length === 1 ? data[0] : null : data
+  if (!row || typeof row !== 'object') throw new Error('Supabase returnerte ikke oppdatert turneringskamp.')
+  return mapClubTournamentRow(row as ClubTournamentRow)
+}
+
+export function saveTournamentMatchProgress(
+  eventDate: string,
+  matchId: string,
+  progress: TournamentMatchProgress,
+): Promise<ClubTournament> {
+  return updateTournamentMatch({
+    target_event_date: eventDate,
+    target_match_id: matchId,
+    operation: 'save-progress',
+    progress,
+  })
+}
+
+export function finishTournamentMatch(
+  eventDate: string,
+  matchId: string,
+  progressId: string,
+  playerOneLegs: number,
+  playerTwoLegs: number,
+): Promise<ClubTournament> {
+  return updateTournamentMatch({
+    target_event_date: eventDate,
+    target_match_id: matchId,
+    operation: 'finish-match',
+    progress_id: progressId,
+    player_one_legs: playerOneLegs,
+    player_two_legs: playerTwoLegs,
+  })
+}
+
+export async function addTournamentCupRound(
+  eventDate: string,
+  roundNumber: number,
+  matches: TournamentMatch[],
+): Promise<ClubTournament> {
+  if (!supabase) throw new Error('Supabase er ikke konfigurert.')
+  if (!navigator.onLine) throw new Error('Du må være på nett for å lagre cuprunden.')
+  const { data, error } = await supabase.rpc('add_club_tournament_cup_round', {
+    target_event_date: eventDate,
+    target_round: roundNumber,
+    round_matches: matches,
+  })
+  if (error) throw error
+  const row = Array.isArray(data) ? data.length === 1 ? data[0] : null : data
+  if (!row || typeof row !== 'object') throw new Error('Supabase returnerte ikke oppdatert cuprunde.')
+  return mapClubTournamentRow(row as ClubTournamentRow)
 }
 
 export async function saveClubTournament(tournament: ClubTournament): Promise<void> {

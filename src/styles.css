@@ -95,6 +95,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .tournament-panel { display: grid; gap: 18px; }
 .tournament-panel .admin-section-heading { grid-template-columns: minmax(0, 1fr) minmax(210px, 290px) auto; }
 .tournament-heading-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.tournament-active-count { align-self: center; margin: 0; color: var(--green); font: 10px var(--mono); text-align: right; }
 .tournament-print-button { min-height: 40px; padding: 0 12px; border: 1px solid var(--green); background: transparent; color: var(--green); font-size: 11px; font-weight: 700; white-space: nowrap; cursor: pointer; }
 .tournament-print-button:hover { background: #175c4510; }
 .tournament-print-content { display: none; }
