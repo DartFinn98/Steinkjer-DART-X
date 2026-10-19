@@ -47,6 +47,81 @@ create table if not exists public.member_player_profiles (
 
 alter table public.member_player_profiles add column if not exists avatar_path text;
 
+create table if not exists public.club_player_directory (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  display_name text not null check (char_length(trim(display_name)) between 1 and 24)
+);
+
+alter table public.club_player_directory enable row level security;
+revoke all on public.club_player_directory from public, anon, authenticated;
+
+insert into public.club_player_directory (user_id, display_name)
+select
+  users.id,
+  left(trim(coalesce(
+    nullif(trim(users.raw_user_meta_data ->> 'display_name'), ''),
+    nullif(players.name, ''),
+    nullif(trim(split_part(users.email, '@', 1)), ''),
+    'Spiller'
+  )), 24)
+from auth.users as users
+left join public.member_player_profiles as profiles on profiles.user_id = users.id
+left join public.players as players on players.id = profiles.player_id
+where users.email_confirmed_at is not null
+on conflict (user_id) do nothing;
+
+create or replace function public.sync_club_player_directory()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  player_display_name text;
+begin
+  if new.email_confirmed_at is null then
+    return new;
+  end if;
+
+  player_display_name := left(trim(regexp_replace(coalesce(
+    nullif(trim(new.raw_user_meta_data ->> 'display_name'), ''),
+    nullif(trim(split_part(new.email, '@', 1)), ''),
+    'Spiller'
+  ), '\s+', ' ', 'g')), 24);
+
+  insert into public.club_player_directory (user_id, display_name)
+  values (new.id, player_display_name)
+  on conflict (user_id) do update
+    set display_name = excluded.display_name;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists sync_club_player_directory on auth.users;
+create trigger sync_club_player_directory
+  after insert or update of email_confirmed_at on auth.users
+  for each row execute function public.sync_club_player_directory();
+
+create or replace function public.get_registered_player_names()
+returns table (display_name text)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select names.display_name
+  from (
+    select distinct directory.display_name
+    from public.club_player_directory as directory
+  ) as names
+  order by lower(names.display_name), names.display_name;
+$$;
+
+revoke all on function public.sync_club_player_directory() from public, anon, authenticated;
+revoke all on function public.get_registered_player_names() from public;
+grant execute on function public.get_registered_player_names() to anon, authenticated;
+
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('profile-avatars', 'profile-avatars', false, 2097152, array['image/jpeg', 'image/png', 'image/webp'])
 on conflict (id) do update

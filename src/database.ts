@@ -509,6 +509,22 @@ export async function loadClubAdmins(): Promise<ClubAdmin[]> {
   }))
 }
 
+export async function loadRegisteredPlayerNames(): Promise<string[]> {
+  if (!supabase) return []
+  const { data, error } = await supabase.rpc('get_registered_player_names')
+  if (error) throw error
+  if (!Array.isArray(data)) throw new Error('Spillerlisten fra Supabase har ugyldig format.')
+  const names: string[] = []
+  for (const entry of data) {
+    if (typeof entry !== 'object' || entry === null || !('display_name' in entry) || typeof entry.display_name !== 'string') {
+      throw new Error('Spillerlisten fra Supabase har ugyldig format.')
+    }
+    names.push(entry.display_name)
+  }
+  return Array.from(new Set<string>(names))
+    .sort((first, second) => first.localeCompare(second, 'nb'))
+}
+
 export async function setClubAdminRole(email: string, isAdmin: boolean): Promise<void> {
   if (!supabase) throw new Error('Supabase er ikke konfigurert.')
   if (!navigator.onLine) throw new Error('Du må være på nett for å endre administratorroller.')

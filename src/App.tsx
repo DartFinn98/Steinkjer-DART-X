@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { getCheckoutHint } from './checkout'
-import { addTournamentCupRound, beginGuestSession, deleteAllClubTournaments, deleteClubSignup, deleteClubTournament, deleteSavedMatch, deleteSavedPlayer, endGuestSession, finishTournamentMatch, getGuestDisplayName, loadClubAdminStatus, loadClubAdmins, loadClubSignups, loadClubTournaments, loadLinkedPlayerProfile, loadSavedData, saveClubSignup, saveClubTournament, saveFinishedMatch, saveLinkedPlayerId, savePlayers, saveTournamentMatchProgress, sendMatchReport, setClubAdminRole, syncPendingChanges, updateClubSignup, uploadProfileAvatar } from './database'
+import { addTournamentCupRound, beginGuestSession, deleteAllClubTournaments, deleteClubSignup, deleteClubTournament, deleteSavedMatch, deleteSavedPlayer, endGuestSession, finishTournamentMatch, getGuestDisplayName, loadClubAdminStatus, loadClubAdmins, loadClubSignups, loadClubTournaments, loadLinkedPlayerProfile, loadRegisteredPlayerNames, loadSavedData, saveClubSignup, saveClubTournament, saveFinishedMatch, saveLinkedPlayerId, savePlayers, saveTournamentMatchProgress, sendMatchReport, setClubAdminRole, syncPendingChanges, updateClubSignup, uploadProfileAvatar } from './database'
 import type { ClubAdmin, ClubSignup, ClubTournament, SavedData, TournamentGameHistory, TournamentMatch, TournamentMatchProgress, TournamentGamePlayer } from './database'
 import { supabase } from './supabase'
 import type { Session } from '@supabase/supabase-js'
@@ -24,7 +24,7 @@ type Player = TournamentGamePlayer
 type Snapshot = TournamentGameHistory
 type EntryMode = 'darts' | 'total'
 type GamePhase = 'setup' | 'bull-off' | 'leg-bull-off' | 'playing'
-type AppSection = 'scoreboard' | 'club-evenings' | 'profile' | 'admin' | 'tournament'
+type AppSection = 'scoreboard' | 'club-evenings' | 'players' | 'profile' | 'admin' | 'tournament'
 type CoinSide = 'kron' | 'mynt'
 type CourtNumber = 1 | 2 | 3 | 4 | 5
 type Visit = TournamentGamePlayer['visits'][number]
@@ -555,10 +555,13 @@ function App() {
   const [databaseMessage, setDatabaseMessage] = useState('')
   const [session, setSession] = useState<Session | null>(null)
   const [guestName, setGuestName] = useState<string | null>(null)
+  const [registeredPlayerNames, setRegisteredPlayerNames] = useState<string[]>([])
+  const [playerDirectoryMessage, setPlayerDirectoryMessage] = useState('')
   const [authLoading, setAuthLoading] = useState(Boolean(supabase))
   const [authMode, setAuthMode] = useState<'login' | 'signup' | 'reset' | 'update-password'>('login')
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
+  const [authDisplayName, setAuthDisplayName] = useState('')
   const [guestNameInput, setGuestNameInput] = useState('')
   const [authMessage, setAuthMessage] = useState('')
   const [authBusy, setAuthBusy] = useState(false)
@@ -633,6 +636,14 @@ function App() {
     }))),
   ].map((player) => [player.id, player])).values())
     .sort((first, second) => first.name.localeCompare(second.name, 'nb'))
+  const rosterPlayerNames = Array.from(new Map<string, string>([
+    ...registeredPlayerNames,
+    ...savedData.players.map((player) => player.name),
+    ...(guestName ? [guestName] : []),
+  ].map((name) => name.trim()).filter(Boolean).map((name) => [name.toLocaleLowerCase('nb-NO'), name] as const)).values())
+    .sort((first, second) => first.localeCompare(second, 'nb'))
+  const accountNameKeys = new Set(registeredPlayerNames.map((name) => name.toLocaleLowerCase('nb-NO')))
+  const additionalSavedPlayers = savedData.players.filter((player) => !accountNameKeys.has(player.name.toLocaleLowerCase('nb-NO')))
   const linkedPlayer = profilePlayers.find((player) => player.id === linkedPlayerId)
   const careerStats = linkedPlayerId ? summarizeCareer(savedData.matches, linkedPlayerId) : null
   const currentClubSignup = clubSignups.find((signup) => signup.eventDate === clubSignupDate && (
@@ -682,6 +693,20 @@ function App() {
       subscription.unsubscribe()
     }
   }, [])
+
+  useEffect(() => {
+    if (!supabase || !isOnline) return
+    let mounted = true
+    void loadRegisteredPlayerNames().then((names) => {
+      if (mounted) {
+        setRegisteredPlayerNames(names)
+        setPlayerDirectoryMessage('')
+      }
+    }).catch(() => {
+      if (mounted) setPlayerDirectoryMessage('Kunne ikke hente listen over registrerte brukere. Oppdater Supabase-oppsettet og prøv igjen.')
+    })
+    return () => { mounted = false }
+  }, [session, guestName, isOnline])
 
   useEffect(() => {
     let mounted = true
@@ -1025,9 +1050,17 @@ function App() {
         setAuthMode('login')
         setAuthMessage('Passordet er oppdatert. Logg inn med det nye passordet.')
       } else if (authMode === 'signup') {
-        const { data, error } = await supabase.auth.signUp({ email: authEmail.trim(), password: authPassword })
+        const displayName = authDisplayName.trim().replace(/\s+/g, ' ')
+        if (displayName.length < 1 || displayName.length > 24) {
+          throw new Error('Visningsnavnet må være mellom 1 og 24 tegn.')
+        }
+        const { data, error } = await supabase.auth.signUp({
+          email: authEmail.trim(),
+          password: authPassword,
+          options: { data: { display_name: displayName } },
+        })
         if (error) throw error
-        if (!data.session) setAuthMessage('Kontoen er opprettet. Sjekk e-posten din for å bekrefte adressen før du logger inn.')
+        if (!data.session) setAuthMessage('Kontoen er opprettet. Bekreft e-postadressen; deretter vises visningsnavnet i spillerlisten.')
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email: authEmail.trim(), password: authPassword })
         if (error) throw error
@@ -1977,6 +2010,7 @@ function App() {
         <form className="auth-panel" onSubmit={submitAuth}>
           <p className="eyebrow">{authMode === 'signup' ? 'NY BRUKER' : isPasswordReset || isPasswordUpdate ? 'GJENOPPRETT TILGANG' : 'KLUBBTILGANG'}</p>
           <h2>{authMode === 'signup' ? 'Opprett konto' : isPasswordReset ? 'Glemt passord' : isPasswordUpdate ? 'Nytt passord' : 'Logg inn'}</h2>
+          {authMode === 'signup' && <label className="auth-field"><span>VISNINGSNAVN</span><input type="text" autoComplete="nickname" maxLength={24} required value={authDisplayName} onChange={(event) => setAuthDisplayName(event.target.value)} placeholder="Navnet ditt i spillerlisten" /><small>Vises for andre på spillerlisten.</small></label>}
           {!isPasswordUpdate && <label className="auth-field"><span>E-POSTADRESSE</span><input type="email" autoComplete="email" required value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="navn@eksempel.no" /></label>}
           {!isPasswordReset && <label className="auth-field"><span>{isPasswordUpdate ? 'NYTT PASSORD' : 'PASSORD'}</span><input type="password" autoComplete={authMode === 'signup' || isPasswordUpdate ? 'new-password' : 'current-password'} minLength={6} required value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} placeholder="Minst 6 tegn" /></label>}
           {authMessage && <p className="auth-message" role="status">{authMessage}</p>}
@@ -1999,6 +2033,7 @@ function App() {
         </a>
         <div className="topbar-actions">
           <div className="topbar-meta">{isOnline ? <span className="live-dot" /> : <span className="offline-dot" />} {isOnline ? gameMode === 'cricket' ? 'CRICKET' : `${gameMode} / DOBBEL UT` : 'OFFLINE'} <span className="court-indicator">BANE {courtNumber}</span>{(guestName || !supabase) && <span className="local-mode-tag">{guestName ? `GJEST: ${guestName}` : 'LOKAL MODUS'}</span>}</div>
+          <button className="club-menu-button profile-menu-button" type="button" aria-current={appSection === 'players' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'players' ? 'scoreboard' : 'players')}>Spillere</button>
           {(!guestName || session) && <button className="club-menu-button" type="button" aria-current={appSection === 'club-evenings' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'club-evenings' ? 'scoreboard' : 'club-evenings')}>{appSection === 'club-evenings' ? 'Poengtavle' : 'Påmelding'}</button>}
           {session && <button className="club-menu-button profile-menu-button" type="button" aria-current={appSection === 'profile' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'profile' ? 'scoreboard' : 'profile')}>Min statistikk</button>}
           {session && <button className="club-menu-button profile-menu-button" type="button" aria-current={appSection === 'tournament' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'tournament' ? 'scoreboard' : 'tournament')}>Turnering</button>}
@@ -2009,7 +2044,22 @@ function App() {
       </header>
       {databaseMessage && <div className="database-message" role="status"><span>{databaseMessage}</span><button type="button" aria-label="Skjul varsel" onClick={() => setDatabaseMessage('')}>Lukk</button></div>}
 
-      {appSection === 'admin' && session && isClubAdmin ? (
+      {appSection === 'players' ? (
+        <section className="player-directory-page">
+          <div className="club-evenings-heading">
+            <p className="eyebrow">STEINKJER DART-X / SPILLERLISTE</p>
+            <h1>Spillere<span className="title-period">.</span></h1>
+            <p className="intro">Kontoer vises med visningsnavn. Velg en spiller her eller i spillerfeltene når du setter opp en kamp.</p>
+          </div>
+          <section className="player-directory-card" aria-label="Registrerte spillere">
+            <div className="admin-section-heading"><div><p className="eyebrow">KONTOER</p><h2>Registrerte brukere</h2></div><span className="player-library-count">{registeredPlayerNames.length}</span></div>
+            {playerDirectoryMessage && <p className="auth-message" role="alert">{playerDirectoryMessage}</p>}
+            {registeredPlayerNames.length > 0 ? <ul className="player-directory-list">{registeredPlayerNames.map((name) => <li key={name}><span>{name}</span><span className="player-directory-tag">KONTO</span></li>)}</ul> : <p className="player-library-empty">{supabase ? 'Ingen bekreftede kontoer i spillerlisten ennå.' : 'Kontoer krever Supabase-oppsett.'}</p>}
+            {guestName && <div className="player-directory-guest"><p className="eyebrow">GJEST I DENNE FANEN</p><p>{guestName} <span className="player-directory-tag">GJEST</span></p><small>Gjestens navn er midlertidig og vises ikke for andre.</small></div>}
+            {additionalSavedPlayers.length > 0 && <div className="player-directory-guest"><p className="eyebrow">SPILLERE FRA KAMPER</p><ul className="player-directory-list">{additionalSavedPlayers.map((player) => <li key={player.id}><span>{player.name}</span><span className="player-directory-tag">SPILLER</span></li>)}</ul></div>}
+          </section>
+        </section>
+      ) : appSection === 'admin' && session && isClubAdmin ? (
         <section className="admin-page">
           <div className="club-evenings-heading">
             <p className="eyebrow">STEINKJER DART-X / ADMINISTRASJON</p>
@@ -2264,9 +2314,10 @@ function App() {
             <div className="name-fields">{names.map((name, index) => (
               <label className="name-field" key={index}>
                 <span>{teamMode ? `LAG ${index % 2 === 0 ? 'A' : 'B'} · SPILLER ${Math.floor(index / 2) + 1}` : `SPILLER ${String(index + 1).padStart(2, '0')}`}</span>
-                <input autoComplete="off" maxLength={24} placeholder={teamMode ? `Lag ${index % 2 === 0 ? 'A' : 'B'} spiller ${Math.floor(index / 2) + 1}` : `Spiller ${index + 1}`} value={name} onChange={(event) => { cancelCoinFlip(); setPlayerNames((items) => { const next = [...items]; next[index] = event.target.value; return next }); setCoinResult(null); setCoinStarterIndex(null) }} />
+                <input list="registered-player-options" autoComplete="off" maxLength={24} placeholder={teamMode ? `Lag ${index % 2 === 0 ? 'A' : 'B'} spiller ${Math.floor(index / 2) + 1}` : `Spiller ${index + 1}`} value={name} onChange={(event) => { cancelCoinFlip(); setPlayerNames((items) => { const next = [...items]; next[index] = event.target.value; return next }); setCoinResult(null); setCoinStarterIndex(null) }} />
               </label>
             ))}</div>
+            <datalist id="registered-player-options">{rosterPlayerNames.map((name) => <option key={name} value={name} />)}</datalist>
             <section className="player-library" aria-label="Spillerliste">
               <div className="player-library-heading"><div><p className="eyebrow">SPILLERLISTE</p><span>Legg til og velg spillere for kampen.</span></div><span className="player-library-count">{savedData.players.length}</span></div>
               <div className="add-roster-player"><input aria-label="Nytt spillernavn" autoComplete="off" maxLength={24} placeholder="Nytt spillernavn" value={newRosterName} onChange={(event) => setNewRosterName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addRosterPlayer() } }} /><button type="button" disabled={!newRosterName.trim()} onClick={addRosterPlayer}>Legg til</button></div>

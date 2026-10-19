@@ -37,6 +37,17 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .club-menu-button[aria-current="page"] { border-color: var(--line); background: transparent; color: var(--green); }
 .profile-menu-button { background: transparent; color: var(--green); }
 .profile-menu-button:hover { background: #175c4510; }
+.player-directory-page { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 470px); align-items: center; gap: 8vw; max-width: 1180px; min-height: calc(100vh - 180px); margin: 0 auto; padding: 50px 0 75px; }
+.player-directory-card { display: grid; gap: 14px; padding: 26px 28px; border: 1px solid #d0d0c6; background: #f8f6efeb; box-shadow: 9px 10px 0 #175c450e; }
+.player-directory-card .admin-section-heading { margin: 0; }
+.player-directory-card .admin-section-heading h2 { margin: 0; font-family: var(--serif); font-size: 28px; font-weight: 500; }
+.player-directory-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.player-directory-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 42px; border-bottom: 1px solid var(--line); color: var(--ink); font-size: 13px; }
+.player-directory-tag { flex: none; color: var(--muted); font: 9px var(--mono); letter-spacing: .8px; }
+.player-directory-guest { display: grid; gap: 8px; padding-top: 15px; border-top: 1px solid var(--line); }
+.player-directory-guest > .eyebrow { margin: 0; }
+.player-directory-guest > p:not(.eyebrow) { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0; }
+.player-directory-guest > small { color: var(--muted); font-size: 11px; line-height: 1.5; }
 .club-evenings-page { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 390px); align-items: center; gap: 8vw; max-width: 1180px; min-height: calc(100vh - 180px); margin: 0 auto; padding: 50px 0 75px; }
 .club-evenings-heading h1 { margin: 0; font-family: var(--serif); font-size: clamp(52px, 9vw, 108px); font-weight: 500; line-height: .98; }
 .club-evenings-heading .intro { margin-top: 24px; }
@@ -504,7 +515,9 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
   .auth-layout { min-height: auto; grid-template-columns: 1fr; gap: 22px; padding: 34px 0; }
   .auth-copy h1 { font-size: 100px; }
   .auth-copy .intro { margin: 14px 0 0; font-size: 18px; }
+  .player-directory-page { min-height: auto; grid-template-columns: 1fr; gap: 22px; padding: 34px 0; }
   .auth-panel { padding: 21px 19px; }
+  .player-directory-card { padding: 21px 19px; }
   .setup-copy { padding: 0; }
   .bull-off-copy { padding: 0; }
   .setup-copy .eyebrow { margin-bottom: 12px; }
