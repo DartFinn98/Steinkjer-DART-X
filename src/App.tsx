@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { getCheckoutHint } from './checkout'
 import { deleteAllClubTournaments, deleteClubSignup, deleteClubTournament, deleteSavedMatch, deleteSavedPlayer, loadClubAdminStatus, loadClubAdmins, loadClubSignups, loadClubTournaments, loadLinkedPlayerProfile, loadSavedData, saveClubSignup, saveClubTournament, saveFinishedMatch, saveLinkedPlayerId, savePlayers, sendMatchReport, setClubAdminRole, syncPendingChanges, updateClubSignup, uploadProfileAvatar } from './database'
-import type { ClubAdmin, ClubSignup, ClubTournament, SavedData, TournamentMatch } from './database'
+import type { ClubAdmin, ClubSignup, ClubTournament, SavedData, TournamentGameHistory, TournamentMatch, TournamentMatchProgress, TournamentGamePlayer } from './database'
 import { supabase } from './supabase'
 import type { Session } from '@supabase/supabase-js'
 import { summarizePlayer } from './stats'
@@ -19,14 +19,14 @@ type ActiveTournamentMatch = {
   playerTwoId: string
 }
 type GameMode = '501' | 'cricket' | '121'
-type Visit = { darts: [number, number, number] | null; total: number; bust: boolean; checkout: boolean; dartsThrown: number; legNumber: number; cricketDarts?: CricketDart[] }
-type Player = { id: string; name: string; score: number; visits: Visit[]; teamId?: 'A' | 'B'; cricketMarks?: CricketMarks; scoreCorrected?: boolean }
-type Snapshot = { players: Player[]; activePlayer: number; winnerId: string | null; legsWon: Record<string, number>; matchWinnerId: string | null }
+type Player = TournamentGamePlayer
+type Snapshot = TournamentGameHistory
 type EntryMode = 'darts' | 'total'
 type GamePhase = 'setup' | 'bull-off' | 'leg-bull-off' | 'playing'
 type AppSection = 'scoreboard' | 'club-evenings' | 'profile' | 'admin' | 'tournament'
 type CoinSide = 'kron' | 'mynt'
 type CourtNumber = 1 | 2 | 3 | 4 | 5
+type Visit = TournamentGamePlayer['visits'][number]
 
 function getSavedCourtNumber(): CourtNumber {
   try {
@@ -67,6 +67,7 @@ type TournamentBoardProps = {
   seedRanks: Record<string, string>
   busy: boolean
   canPlayMatch: boolean
+  canResumeMatch: boolean
   isAdmin: boolean
   message: string
   messageIsError: boolean
@@ -96,6 +97,7 @@ function TournamentBoard({
   seedRanks,
   busy,
   canPlayMatch,
+  canResumeMatch,
   isAdmin,
   message,
   messageIsError,
@@ -166,7 +168,7 @@ function TournamentBoard({
             <td>{index + 1}</td><th scope="row">{participant.playerName}{participant.seed !== null && <small>Seed {participant.seed}</small>}</th><td>{participant.wins}</td><td>{participant.legDifference > 0 ? `+${participant.legDifference}` : participant.legDifference}</td>
             {isAdmin && tournament.cupRound === 0 && <td><input type="checkbox" aria-label={`${participant.playerName} går videre`} checked={participant.advances} disabled={!poolIsComplete || busy} onChange={(event) => onToggleAdvancement(participant.signupId, event.target.checked)} /></td>}
           </tr>)}</tbody></table></div>
-          <ul className="tournament-match-list">{poolMatches.filter((match) => match.poolNumber === poolNumber).map((match) => <TournamentMatchRow key={match.id} match={match} tournament={tournament} isAdmin={isAdmin} busy={busy} canPlayMatch={canPlayMatch} onPlayMatch={onPlayMatch} />)}</ul>
+          <ul className="tournament-match-list">{poolMatches.filter((match) => match.poolNumber === poolNumber).map((match) => <TournamentMatchRow key={match.id} match={match} tournament={tournament} isAdmin={isAdmin} busy={busy} canPlayMatch={canPlayMatch} canResumeMatch={canResumeMatch} onPlayMatch={onPlayMatch} />)}</ul>
         </section>
       })}
       {isAdmin && tournament.cupRound === 0 && poolsComplete && <div className="tournament-actions">
@@ -177,7 +179,7 @@ function TournamentBoard({
         <h3>Cup-oppsett<span>{tournamentFinished ? 'Ferdig' : `${getRoundLabel(tournament.cupRound, cupRoundMatches.length)} gjenstår`}</span></h3>
         {Array.from(new Set(cupMatches.map((match) => match.roundNumber))).sort((first, second) => first - second).map((round) => {
           const roundMatches = cupMatches.filter((match) => match.roundNumber === round).sort((first, second) => first.bracketPosition - second.bracketPosition)
-          return <section className="tournament-cup-round" key={round}><h4>{getRoundLabel(round, roundMatches.length)}</h4><ul className="tournament-match-list">{roundMatches.map((match) => <TournamentMatchRow key={match.id} match={match} tournament={tournament} isAdmin={isAdmin} busy={busy} canPlayMatch={canPlayMatch} onPlayMatch={onPlayMatch} />)}</ul></section>
+          return <section className="tournament-cup-round" key={round}><h4>{getRoundLabel(round, roundMatches.length)}</h4><ul className="tournament-match-list">{roundMatches.map((match) => <TournamentMatchRow key={match.id} match={match} tournament={tournament} isAdmin={isAdmin} busy={busy} canPlayMatch={canPlayMatch} canResumeMatch={canResumeMatch} onPlayMatch={onPlayMatch} />)}</ul></section>
         })}
         {tournamentFinished && <p className="tournament-champion">Vinner: {participantName(cupRoundMatches[0].winnerSignupId!)}</p>}
       </section>}
@@ -190,13 +192,15 @@ function TournamentBoard({
           const finalMatch = cupRounds.find((match) => match.roundNumber === archived.cupRound)
           const poolMatches = archived.matches.filter((match) => match.phase === 'pool')
           const incompletePoolMatches = poolMatches.filter((match) => match.winnerSignupId === null).length
-          const status = archived.participants.length < 2 || poolMatches.length === 0
+          const matchInProgress = archived.matches.some((match) => match.inProgress)
+          const baseStatus = archived.participants.length < 2 || poolMatches.length === 0
             ? 'Feil: puljeoppsett mangler'
             : finalMatch?.winnerSignupId
             ? 'Ferdig'
             : archived.cupRound > 0
               ? `${getRoundLabel(archived.cupRound, cupRounds.filter((match) => match.roundNumber === archived.cupRound).length)} gjenstår`
               : incompletePoolMatches === 0 ? 'Puljer ferdige' : `Puljespill · ${incompletePoolMatches} kamper gjenstår`
+          const status = matchInProgress ? `${baseStatus} · kamp kan fortsettes` : baseStatus
           return <li key={archived.eventDate}>
             <div className="tournament-archive-info"><strong>{formatClubDate(archived.eventDate)}</strong><span>{archived.participants.length} spillere · {status}</span>
               {pendingDeleteDate === archived.eventDate && <div className="tournament-delete-confirmation" role="alert"><span>Slette turneringen fra {formatClubDate(archived.eventDate)}? Dette kan ikke angres.</span><button className="tournament-delete-button" type="button" disabled={deleting} onClick={() => onDeleteTournament(archived.eventDate)}>{deleting ? 'Sletter …' : 'Ja, slett'}</button><button type="button" disabled={deleting} onClick={onCancelDelete}>Avbryt</button></div>}
@@ -292,19 +296,24 @@ type TournamentMatchRowProps = {
   isAdmin: boolean
   busy: boolean
   canPlayMatch: boolean
+  canResumeMatch: boolean
   onPlayMatch: (match: TournamentMatch) => void
 }
 
-function TournamentMatchRow({ match, tournament, isAdmin, busy, canPlayMatch, onPlayMatch }: TournamentMatchRowProps) {
+function TournamentMatchRow({ match, tournament, isAdmin, busy, canPlayMatch, canResumeMatch, onPlayMatch }: TournamentMatchRowProps) {
   const playerOne = tournament.participants.find((participant) => participant.signupId === match.playerOneSignupId)?.playerName ?? 'Ukjent spiller'
   const playerTwo = match.playerTwoSignupId
     ? tournament.participants.find((participant) => participant.signupId === match.playerTwoSignupId)?.playerName ?? 'Ukjent spiller'
     : 'Walkover'
   const completed = match.winnerSignupId !== null
+  const progressScore = match.inProgress
+    ? `${match.inProgress.legsWon[match.inProgress.players[0]?.id ?? ''] ?? 0}–${match.inProgress.legsWon[match.inProgress.players[1]?.id ?? ''] ?? 0}`
+    : ''
   return <li className="tournament-match">
     <div className="tournament-match-info"><span>{playerOne}</span><b>–</b><span>{playerTwo}</span><small>Best av {match.bestOfLegs}</small></div>
     {completed ? <strong className="tournament-match-result">{match.playerOneLegs !== null && match.playerTwoLegs !== null ? `${match.playerOneLegs}–${match.playerTwoLegs}` : 'Videre på walkover'} · {tournament.participants.find((participant) => participant.signupId === match.winnerSignupId)?.playerName}</strong>
-      : isAdmin && match.playerTwoSignupId ? <button className="tournament-play-button" type="button" disabled={busy || !canPlayMatch} onClick={() => onPlayMatch(match)}>Spill kamp på poengtavla</button>
+      : isAdmin && match.playerTwoSignupId && match.inProgress ? <button className="tournament-play-button" type="button" disabled={busy || !canResumeMatch} onClick={() => onPlayMatch(match)}>Fortsett kampen · {progressScore} legg</button>
+        : isAdmin && match.playerTwoSignupId ? <button className="tournament-play-button" type="button" disabled={busy || !canPlayMatch} onClick={() => onPlayMatch(match)}>Spill kamp på poengtavla</button>
         : <span className="tournament-match-pending">{isAdmin && !canPlayMatch ? 'Avslutt pågående kamp først' : 'Venter på resultat'}</span>}
   </li>
 }
@@ -547,6 +556,8 @@ function App() {
   const [adminEmail, setAdminEmail] = useState('')
   const [adminRoleBusy, setAdminRoleBusy] = useState(false)
   const [clubTournaments, setClubTournaments] = useState<ClubTournament[]>([])
+  const clubTournamentsRef = useRef<ClubTournament[]>([])
+  const tournamentProgressSaveQueue = useRef<Promise<void>>(Promise.resolve())
   const [tournamentDate, setTournamentDate] = useState(() => getUpcomingClubDates()[0] ?? '')
   const [tournamentSeedRanks, setTournamentSeedRanks] = useState<Record<string, string>>({})
   const [tournamentBusy, setTournamentBusy] = useState(false)
@@ -564,6 +575,10 @@ function App() {
   const [profileMessage, setProfileMessage] = useState('')
   const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null)
   const [profileAvatarBusy, setProfileAvatarBusy] = useState(false)
+
+  useEffect(() => {
+    clubTournamentsRef.current = clubTournaments
+  }, [clubTournaments])
 
   const upcomingClubDates = getUpcomingClubDates()
   const todayDate = new Date()
@@ -964,15 +979,47 @@ function App() {
     void supabase.auth.signOut().catch(() => setDatabaseMessage('Kunne ikke logge ut. Prøv igjen.'))
   }
 
+  function persistCurrentTournamentProgress(
+    overrides: Partial<TournamentMatchProgress> = {},
+    previousState: TournamentGameHistory | null = history.at(-1) ?? null,
+  ) {
+    if (!activeTournamentMatch) return
+    const progress: TournamentMatchProgress = {
+      players,
+      activePlayer,
+      legsWon,
+      matchWinnerId,
+      legStarterIndex,
+      gamePhase: gamePhase === 'setup' ? 'bull-off' : gamePhase,
+      coinStarterIndex,
+      bullWinnerId,
+      winnerId,
+      previousState,
+      ...overrides,
+    }
+    void persistTournamentMatchProgress(activeTournamentMatch, progress).catch(() => undefined)
+  }
+
   function startGame() {
     const startingPlayer = players.findIndex((player) => player.id === bullWinnerId)
     if (startingPlayer < 0 || (useCoinToss && coinStarterIndex === null)) return
     setActivePlayer(startingPlayer)
     setLegStarterIndex(startingPlayer)
     setGamePhase('playing')
+    persistCurrentTournamentProgress({
+      activePlayer: startingPlayer,
+      legStarterIndex: startingPlayer,
+      gamePhase: 'playing',
+    })
   }
 
-  function finishLeg(legWinnerId: string, completedPlayers: Player[], finishMethod: 'checkout' | 'bull-off') {
+  function finishLeg(
+    legWinnerId: string,
+    completedPlayers: Player[],
+    finishMethod: 'checkout' | 'bull-off',
+    nextActivePlayer = activePlayer,
+    previousState: TournamentGameHistory | null = null,
+  ) {
     const legWinner = completedPlayers.find((player) => player.id === legWinnerId)
     const winningPlayers = legWinner ? teamMembers(completedPlayers, legWinner) : []
     const nextLegsWon = { ...legsWon }
@@ -1011,6 +1058,16 @@ function App() {
         setEmailReportMessage('E-postrapport krever Supabase-innlogging.')
       }
       if (activeTournamentMatch) void saveFinishedTournamentMatch(activeTournamentMatch, nextLegsWon)
+    } else {
+      persistCurrentTournamentProgress({
+        players: completedPlayers,
+        activePlayer: nextActivePlayer,
+        legsWon: nextLegsWon,
+        winnerId: legWinnerId,
+        matchWinnerId: null,
+        gamePhase: 'playing',
+        previousState,
+      }, previousState)
     }
   }
 
@@ -1020,13 +1077,19 @@ function App() {
     setCoinStarterIndex(useCoinToss ? null : 0)
     setBullWinnerId('')
     setGamePhase('leg-bull-off')
+    persistCurrentTournamentProgress({
+      gamePhase: 'leg-bull-off',
+      coinStarterIndex: useCoinToss ? null : 0,
+      bullWinnerId: '',
+    })
   }
 
   function finishLegBullOff() {
     const legWinner = players.find((player) => player.id === bullWinnerId)
     if (!legWinner || !players.some((player) => player.score === 42)) return
-    setHistory((items) => [...items, { players, activePlayer, winnerId, legsWon, matchWinnerId }])
-    finishLeg(legWinner.id, players, 'bull-off')
+    const nextHistory = [...history, { players, activePlayer, winnerId, legsWon, matchWinnerId }]
+    setHistory(nextHistory)
+    finishLeg(legWinner.id, players, 'bull-off', activePlayer, nextHistory.at(-1) ?? null)
   }
 
   function recordVisit(event: FormEvent<HTMLFormElement>) {
@@ -1087,11 +1150,20 @@ function App() {
           : player
       })
 
-      setHistory((items) => [...items, { players, activePlayer, winnerId, legsWon, matchWinnerId }])
+      const nextHistory = [...history, { players, activePlayer, winnerId, legsWon, matchWinnerId }]
+      const nextActivePlayer = (activePlayer + 1) % players.length
+      setHistory(nextHistory)
       setPlayers(nextPlayers)
-      setActivePlayer((activePlayer + 1) % players.length)
-      if (cricketWinner) finishLeg(currentPlayer.id, nextPlayers, 'checkout')
-      else setWinnerId(null)
+      setActivePlayer(nextActivePlayer)
+      if (cricketWinner) finishLeg(currentPlayer.id, nextPlayers, 'checkout', nextActivePlayer, nextHistory.at(-1) ?? null)
+      else {
+        setWinnerId(null)
+        persistCurrentTournamentProgress({
+          players: nextPlayers,
+          activePlayer: nextActivePlayer,
+          winnerId: null,
+        }, nextHistory.at(-1) ?? null)
+      }
       setDarts(['', '', ''])
       setManualTotal('')
       setManualBust(false)
@@ -1110,11 +1182,20 @@ function App() {
         : player
     })
 
-    setHistory((items) => [...items, { players, activePlayer, winnerId, legsWon, matchWinnerId }])
+    const nextHistory = [...history, { players, activePlayer, winnerId, legsWon, matchWinnerId }]
+    const nextActivePlayer = (activePlayer + 1) % players.length
+    setHistory(nextHistory)
     setPlayers(nextPlayers)
-    setActivePlayer((activePlayer + 1) % players.length)
-    if (checkout) finishLeg(currentPlayer.id, nextPlayers, 'checkout')
-    else setWinnerId(null)
+    setActivePlayer(nextActivePlayer)
+    if (checkout) finishLeg(currentPlayer.id, nextPlayers, 'checkout', nextActivePlayer, nextHistory.at(-1) ?? null)
+    else {
+      setWinnerId(null)
+      persistCurrentTournamentProgress({
+        players: nextPlayers,
+        activePlayer: nextActivePlayer,
+        winnerId: null,
+      }, nextHistory.at(-1) ?? null)
+    }
     setDarts(['', '', ''])
     setManualTotal('')
     setManualDartsThrown(3)
@@ -1132,13 +1213,23 @@ function App() {
     setLegsWon(previous.legsWon)
     setMatchWinnerId(previous.matchWinnerId)
     setGamePhase('playing')
-    setHistory((items) => items.slice(0, -1))
+    const nextHistory = history.slice(0, -1)
+    setHistory(nextHistory)
     setDarts(['', '', ''])
     setManualTotal('')
     setManualDartsThrown(3)
     setManualLastDartDouble(false)
     setManualBust(false)
     setMessage('Siste tur er angret.')
+    persistCurrentTournamentProgress({
+      players: previous.players,
+      activePlayer: previous.activePlayer,
+      winnerId: previous.winnerId,
+      legsWon: previous.legsWon,
+      matchWinnerId: previous.matchWinnerId,
+      gamePhase: 'playing',
+      previousState: nextHistory.at(-1) ?? null,
+    }, nextHistory.at(-1) ?? null)
   }
 
   function newGame() {
@@ -1168,12 +1259,13 @@ function App() {
   function startNextLeg() {
     if (!winnerId || matchWinnerId) return
     const nextStarter = (legStarterIndex + 1) % players.length
-    setPlayers(players.map((player) => ({
+    const nextPlayers = players.map((player) => ({
       ...player,
       score: gameMode === '121' ? 121 : gameMode === '501' ? 501 : 0,
       ...(gameMode === 'cricket' ? { cricketMarks: Object.fromEntries(CRICKET_TARGETS.map((target) => [target, 0])) } : {}),
       scoreCorrected: false,
-    })))
+    }))
+    setPlayers(nextPlayers)
     setWinnerId(null)
     setActivePlayer(nextStarter)
     setLegStarterIndex(nextStarter)
@@ -1188,6 +1280,17 @@ function App() {
     setCoinResult(null)
     setMessage('')
     setEmailReportMessage('')
+    persistCurrentTournamentProgress({
+      players: nextPlayers,
+      activePlayer: nextStarter,
+      winnerId: null,
+      matchWinnerId: null,
+      legStarterIndex: nextStarter,
+      gamePhase: 'playing',
+      coinStarterIndex: null,
+      bullWinnerId: '',
+      previousState: null,
+    })
   }
 
   function reopenSavedMatch(match: SavedData['matches'][number]) {
@@ -1310,16 +1413,21 @@ function App() {
       return
     }
 
-    setHistory((items) => [...items, { players, activePlayer, winnerId, legsWon, matchWinnerId }])
+    const nextHistory = [...history, { players, activePlayer, winnerId, legsWon, matchWinnerId }]
+    setHistory(nextHistory)
     const correctedPlayers = players.map((item) => item.id === player.id || (teamMode && item.teamId === player.teamId)
       ? { ...item, score: correctedScore, scoreCorrected: true }
       : item)
     closeScoreEditor()
 
-    if (correctedScore === 0) finishLeg(player.id, correctedPlayers, 'checkout')
+    if (correctedScore === 0) finishLeg(player.id, correctedPlayers, 'checkout', activePlayer, nextHistory.at(-1) ?? null)
     else {
       setPlayers(correctedPlayers)
       setMessage(`${player.name}s poengsum er korrigert.`)
+      persistCurrentTournamentProgress({
+        players: correctedPlayers,
+        previousState: nextHistory.at(-1) ?? null,
+      }, nextHistory.at(-1) ?? null)
     }
   }
 
@@ -1446,7 +1554,6 @@ function App() {
     setTournamentBusy(true)
     setTournamentMessage('')
     setTournamentMessageIsError(false)
-    setTournamentMessageIsError(false)
     try {
       await saveClubTournament(tournament)
       setClubTournaments((current) => [...current.filter((item) => item.eventDate !== tournament.eventDate), tournament]
@@ -1459,15 +1566,47 @@ function App() {
     }
   }
 
+  function persistTournamentMatchProgress(
+    activeMatch: ActiveTournamentMatch,
+    progress: TournamentMatchProgress,
+  ): Promise<void> {
+    const saveOperation = tournamentProgressSaveQueue.current.catch(() => undefined).then(async () => {
+      const tournament = clubTournamentsRef.current.find((item) => item.eventDate === activeMatch.eventDate)
+      if (!tournament) throw new Error('Turneringen ble ikke funnet.')
+      const matchExists = tournament.matches.some((match) => match.id === activeMatch.matchId && match.winnerSignupId === null)
+      if (!matchExists) throw new Error('Turneringskampen finnes ikke lenger eller er allerede avgjort.')
+      const updatedTournament = {
+        ...tournament,
+        matches: tournament.matches.map((match) => match.id === activeMatch.matchId
+          ? { ...match, inProgress: progress }
+          : match),
+        updatedAt: new Date().toISOString(),
+      }
+      await saveClubTournament(updatedTournament)
+      const updatedTournaments = [...clubTournamentsRef.current.filter((item) => item.eventDate !== updatedTournament.eventDate), updatedTournament]
+        .sort((first, second) => first.eventDate.localeCompare(second.eventDate))
+      clubTournamentsRef.current = updatedTournaments
+      setClubTournaments(updatedTournaments)
+      setTournamentMatchMessage('Kampen lagres automatisk mens dere spiller.')
+    })
+    tournamentProgressSaveQueue.current = saveOperation.catch((error: unknown) => {
+      setTournamentMatchMessage(error instanceof Error
+        ? `Kampen kunne ikke lagres for gjenopptakelse: ${error.message}`
+        : 'Kampen kunne ikke lagres for gjenopptakelse.')
+    })
+    return saveOperation
+  }
+
   async function saveFinishedTournamentMatch(
     activeMatch: ActiveTournamentMatch,
     completedLegs: Record<string, number>,
   ) {
+    await tournamentProgressSaveQueue.current
     if (!isClubAdmin) {
       setTournamentMatchMessage('Du må være klubbadministrator for å lagre turneringsresultatet.')
       return
     }
-    const tournament = clubTournaments.find((item) => item.eventDate === activeMatch.eventDate)
+    const tournament = clubTournamentsRef.current.find((item) => item.eventDate === activeMatch.eventDate)
     if (!tournament) {
       setTournamentMatchMessage('Turneringen ble ikke funnet. Resultatet er ikke lagret i turneringen.')
       return
@@ -1506,8 +1645,10 @@ function App() {
         }
       }
       await saveClubTournament(updatedTournament)
-      setClubTournaments((current) => [...current.filter((item) => item.eventDate !== updatedTournament.eventDate), updatedTournament]
-        .sort((first, second) => first.eventDate.localeCompare(second.eventDate)))
+      const updatedTournaments = [...clubTournamentsRef.current.filter((item) => item.eventDate !== updatedTournament.eventDate), updatedTournament]
+        .sort((first, second) => first.eventDate.localeCompare(second.eventDate))
+      clubTournamentsRef.current = updatedTournaments
+      setClubTournaments(updatedTournaments)
       setActiveTournamentMatch(null)
       setTournamentMatchMessage('Turneringsresultatet er registrert automatisk.')
     } catch (error) {
@@ -1518,8 +1659,55 @@ function App() {
     }
   }
 
-  function startTournamentMatch(match: TournamentMatch) {
+  function restoreTournamentMatch(match: TournamentMatch) {
+    if (!selectedTournament || !match.inProgress || !isClubAdmin) return
+    const progress = match.inProgress
+    if (progress.players.length !== 2 || progress.activePlayer < 0 || progress.activePlayer > 1) {
+      showTournamentError('Den lagrede kampstillingen er ugyldig og kan ikke gjenopptas.')
+      return
+    }
+    setActiveTournamentMatch({
+      eventDate: selectedTournament.eventDate,
+      matchId: match.id,
+      playerOneId: progress.players[0].id,
+      playerTwoId: progress.players[1].id,
+    })
+    setPlayers(progress.players)
+    setPlayerNames(progress.players.map((player) => player.name))
+    setPlayerCount(2)
+    setTeamMode(false)
+    setGameMode('501')
+    setBestOfLegs(match.bestOfLegs)
+    setUseCoinToss(false)
+    setActivePlayer(progress.activePlayer)
+    setLegsWon(progress.legsWon)
+    setMatchWinnerId(progress.matchWinnerId)
+    setLegStarterIndex(progress.legStarterIndex)
+    setGamePhase(progress.gamePhase)
+    setCoinStarterIndex(progress.coinStarterIndex)
+    setCoinResult(null)
+    setBullWinnerId(progress.bullWinnerId)
+    setWinnerId(progress.winnerId)
+    setHistory(progress.previousState ? [progress.previousState] : [])
+    setDarts(['', '', ''])
+    setManualTotal('')
+    setManualDartsThrown(3)
+    setManualLastDartDouble(false)
+    setManualBust(false)
+    setMessage('Kampen er gjenopptatt fra sist lagrede stilling.')
+    setTournamentMatchMessage('Kampen lagres automatisk mens dere spiller.')
+    setDatabaseMessage('')
+    setEmailReportMessage('')
+    setReopenedMatchId(null)
+    setAppSection('scoreboard')
+  }
+
+  async function startTournamentMatch(match: TournamentMatch) {
     if (!isClubAdmin || !selectedTournament || !match.playerTwoSignupId || match.winnerSignupId !== null || activeTournamentMatch) return
+    if (match.inProgress) {
+      restoreTournamentMatch(match)
+      return
+    }
     const participantOne = selectedTournament.participants.find((participant) => participant.signupId === match.playerOneSignupId)
     const participantTwo = selectedTournament.participants.find((participant) => participant.signupId === match.playerTwoSignupId)
     if (!participantOne || !participantTwo) {
@@ -1532,6 +1720,37 @@ function App() {
       { id: playerOneId, name: participantOne.playerName, score: 501, visits: [] },
       { id: playerTwoId, name: participantTwo.playerName, score: 501, visits: [] },
     ]
+    const activeMatch = {
+      eventDate: selectedTournament.eventDate,
+      matchId: match.id,
+      playerOneId,
+      playerTwoId,
+    }
+    const initialProgress: TournamentMatchProgress = {
+      players: matchPlayers,
+      activePlayer: 0,
+      legsWon: { [playerOneId]: 0, [playerTwoId]: 0 },
+      winnerId: null,
+      matchWinnerId: null,
+      legStarterIndex: 0,
+      gamePhase: 'bull-off',
+      coinStarterIndex: 0,
+      bullWinnerId: '',
+      previousState: null,
+    }
+    setTournamentBusy(true)
+    setTournamentMessage('')
+    setTournamentMessageIsError(false)
+    try {
+      await persistTournamentMatchProgress(activeMatch, initialProgress)
+    } catch (error) {
+      showTournamentError(error instanceof Error
+        ? `Kampen kunne ikke startes fordi stillingen ikke ble lagret: ${error.message}`
+        : 'Kampen kunne ikke startes fordi stillingen ikke ble lagret.')
+      return
+    } finally {
+      setTournamentBusy(false)
+    }
     setActiveTournamentMatch({
       eventDate: selectedTournament.eventDate,
       matchId: match.id,
@@ -1573,6 +1792,13 @@ function App() {
   function retryTournamentMatchSave() {
     if (activeTournamentMatch && matchWinnerId) {
       void saveFinishedTournamentMatch(activeTournamentMatch, legsWon)
+    }
+  }
+
+  function retryTournamentProgressSave() {
+    if (activeTournamentMatch && !matchWinnerId) {
+      setTournamentMatchMessage('Lagrer kampstillingen på nytt …')
+      persistCurrentTournamentProgress()
     }
   }
 
@@ -1720,7 +1946,8 @@ function App() {
             signups={currentTournamentSignups}
             seedRanks={tournamentSeedRanks}
             busy={tournamentBusy}
-            canPlayMatch={(players.length === 0 || matchWinnerId !== null) && !activeTournamentMatch}
+            canPlayMatch={(players.length === 0 || matchWinnerId !== null) && !activeTournamentMatch && !clubTournaments.some((item) => item.matches.some((match) => match.inProgress))}
+            canResumeMatch={(players.length === 0 || matchWinnerId !== null) && !activeTournamentMatch}
             isAdmin
             message={tournamentMessage}
             messageIsError={tournamentMessageIsError}
@@ -1765,7 +1992,8 @@ function App() {
             signups={currentTournamentSignups}
             seedRanks={tournamentSeedRanks}
             busy={tournamentBusy}
-            canPlayMatch={(players.length === 0 || matchWinnerId !== null) && !activeTournamentMatch}
+            canPlayMatch={(players.length === 0 || matchWinnerId !== null) && !activeTournamentMatch && !clubTournaments.some((item) => item.matches.some((match) => match.inProgress))}
+            canResumeMatch={(players.length === 0 || matchWinnerId !== null) && !activeTournamentMatch}
             isAdmin={isClubAdmin}
             message={tournamentMessage}
             messageIsError={tournamentMessageIsError}
@@ -2015,6 +2243,7 @@ function App() {
               <button className="text-button new-game-button" type="button" disabled={Boolean(activeTournamentMatch && matchWinnerId)} onClick={newGame}>Ny kamp <span aria-hidden="true">↗</span></button>
             </div>
           </div>
+          {activeTournamentMatch && <div className={`tournament-resume-status${tournamentMatchMessage.includes('ikke') ? ' is-error' : ''}`} role={tournamentMatchMessage.includes('ikke') ? 'alert' : 'status'}><span>{tournamentMatchMessage || 'Turneringskampen lagres automatisk, så den kan fortsettes senere.'}</span>{tournamentMatchMessage.includes('gjenopptakelse') && !matchWinnerId && <button className="text-button" type="button" onClick={retryTournamentProgressSave}>Prøv lagring på nytt</button>}</div>}
           {gameMode === '501' && !winnerId && players.length > 1 && players.some((player) => player.score === 42) && <div className="bull-trigger" role="status"><div><span>42 IGJEN</span><strong>Vil dere avgjøre leggen med et kast på bull?</strong></div><button className="bull-trigger-button" type="button" onClick={beginLegBullOff}>Avgjør på bull</button></div>}
           <div className={`player-grid players-${players.length}`}>
             {players.map((player, index) => {

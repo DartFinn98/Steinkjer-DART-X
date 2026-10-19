@@ -109,9 +109,12 @@ export function updateTournamentMatchResult(
   }
 
   const winnerSignupId = playerOneLegs > playerTwoLegs ? match.playerOneSignupId : match.playerTwoSignupId
-  const matches = tournament.matches.map((candidate) => candidate.id === matchId
-    ? { ...candidate, playerOneLegs, playerTwoLegs, winnerSignupId }
-    : candidate)
+  const matches = tournament.matches.map((candidate) => {
+    if (candidate.id !== matchId) return candidate
+    const completedMatch = { ...candidate }
+    delete completedMatch.inProgress
+    return { ...completedMatch, playerOneLegs, playerTwoLegs, winnerSignupId }
+  })
   return { ...tournament, matches, updatedAt: new Date().toISOString() }
 }
 

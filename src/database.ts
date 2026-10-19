@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import type { PlayerMatchStats } from './stats'
+import type { CricketDart, CricketMarks } from './cricket'
 
 export type SavedPlayer = {
   id: string
@@ -45,6 +46,45 @@ export type TournamentParticipant = {
   advances: boolean
 }
 
+export type TournamentGamePlayer = {
+  id: string
+  name: string
+  score: number
+  visits: Array<{
+    darts: [number, number, number] | null
+    total: number
+    bust: boolean
+    checkout: boolean
+    dartsThrown: number
+    legNumber: number
+    cricketDarts?: CricketDart[]
+  }>
+  teamId?: 'A' | 'B'
+  cricketMarks?: CricketMarks
+  scoreCorrected?: boolean
+}
+
+export type TournamentGameHistory = {
+  players: TournamentGamePlayer[]
+  activePlayer: number
+  winnerId: string | null
+  legsWon: Record<string, number>
+  matchWinnerId: string | null
+}
+
+export type TournamentMatchProgress = {
+  players: TournamentGamePlayer[]
+  activePlayer: number
+  legsWon: Record<string, number>
+  winnerId: string | null
+  matchWinnerId: string | null
+  legStarterIndex: number
+  gamePhase: 'bull-off' | 'leg-bull-off' | 'playing'
+  coinStarterIndex: number | null
+  bullWinnerId: string
+  previousState: TournamentGameHistory | null
+}
+
 export type TournamentMatch = {
   id: string
   phase: 'pool' | 'cup'
@@ -57,6 +97,7 @@ export type TournamentMatch = {
   playerTwoLegs: number | null
   winnerSignupId: string | null
   bestOfLegs: 3 | 5 | 7 | 9
+  inProgress?: TournamentMatchProgress
 }
 
 export type ClubTournament = {
