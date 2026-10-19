@@ -32,12 +32,19 @@ export type ClubSignup = {
   signedUpAt: string
 }
 
+export type LinkedPlayerProfile = {
+  userId: string
+  playerId: string
+}
+
 const DATABASE_NAME = 'darttavla'
 const DATABASE_VERSION = 3
 const PLAYER_STORE = 'players'
 const MATCH_STORE = 'matches'
 const PENDING_STORE = 'pending'
 const CLUB_SIGNUP_STORE = 'club-signups'
+const PROFILE_AVATAR_BUCKET = 'profile-avatars'
+const PROFILE_AVATAR_MAX_SIZE = 2 * 1024 * 1024
 
 type PendingChange =
   | { id: string; kind: 'save-players'; players: SavedPlayer[]; queuedAt: number }
@@ -311,6 +318,75 @@ export async function deleteClubSignup(signupId: string): Promise<void> {
 
   const signups = await loadLocalClubSignups()
   await cacheClubSignups(signups.filter((signup) => signup.id !== signupId))
+}
+
+export async function loadLinkedPlayerProfile(userId: string): Promise<{ playerId: string | null; avatarUrl: string | null }> {
+  if (!supabase) throw new Error('Supabase er ikke konfigurert.')
+  const { data, error } = await supabase
+    .from('member_player_profiles')
+    .select('player_id, avatar_path')
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (error) throw error
+  if (!data?.avatar_path) return { playerId: data?.player_id ?? null, avatarUrl: null }
+
+  const { data: signedUrl, error: signedUrlError } = await supabase.storage
+    .from(PROFILE_AVATAR_BUCKET)
+    .createSignedUrl(data.avatar_path, 60 * 60)
+  if (signedUrlError) throw signedUrlError
+  return { playerId: data.player_id, avatarUrl: signedUrl.signedUrl }
+}
+
+export async function saveLinkedPlayerId(userId: string, playerId: string): Promise<void> {
+  if (!supabase) throw new Error('Supabase er ikke konfigurert.')
+  if (!playerId.trim()) throw new Error('Velg en spillerprofil.')
+  if (!navigator.onLine) throw new Error('Du må være på nett for å lagre spillerprofilen.')
+
+  const { error } = await supabase.from('member_player_profiles').upsert({
+    user_id: userId,
+    player_id: playerId,
+  }, { onConflict: 'user_id' })
+  if (error) throw error
+}
+
+export async function uploadProfileAvatar(userId: string, file: File): Promise<string> {
+  if (!supabase) throw new Error('Supabase er ikke konfigurert.')
+  if (!navigator.onLine) throw new Error('Du må være på nett for å laste opp profilbilde.')
+  if (file.size > PROFILE_AVATAR_MAX_SIZE) throw new Error('Bildet kan ikke være større enn 2 MB.')
+
+  const extensions: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+  }
+  const extension = extensions[file.type]
+  if (!extension) throw new Error('Velg et JPG-, PNG- eller WebP-bilde.')
+
+  const { data: profile, error: profileError } = await supabase
+    .from('member_player_profiles')
+    .select('player_id')
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (profileError) throw profileError
+  if (!profile) throw new Error('Knytt kontoen til en spillerprofil før du laster opp bilde.')
+
+  const path = `${userId}/avatar.${extension}`
+  const { error: uploadError } = await supabase.storage
+    .from(PROFILE_AVATAR_BUCKET)
+    .upload(path, file, { cacheControl: '3600', contentType: file.type, upsert: true })
+  if (uploadError) throw uploadError
+
+  const { error: profileUpdateError } = await supabase
+    .from('member_player_profiles')
+    .update({ avatar_path: path })
+    .eq('user_id', userId)
+  if (profileUpdateError) throw profileUpdateError
+
+  const { data: signedUrl, error: signedUrlError } = await supabase.storage
+    .from(PROFILE_AVATAR_BUCKET)
+    .createSignedUrl(path, 60 * 60)
+  if (signedUrlError) throw signedUrlError
+  return signedUrl.signedUrl
 }
 
 export async function savePlayers(names: string[]): Promise<void> {

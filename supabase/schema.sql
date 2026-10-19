@@ -25,6 +25,21 @@ create table if not exists public.club_signups (
   unique (event_date, signed_up_by)
 );
 
+create table if not exists public.member_player_profiles (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  player_id text not null,
+  avatar_path text
+);
+
+alter table public.member_player_profiles add column if not exists avatar_path text;
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('profile-avatars', 'profile-avatars', false, 2097152, array['image/jpeg', 'image/png', 'image/webp'])
+on conflict (id) do update
+set public = false,
+    file_size_limit = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
+
 alter table public.matches add column if not exists finish_method text;
 alter table public.matches add column if not exists leg_starter_name text;
 alter table public.matches add column if not exists court_number smallint not null default 1 check (court_number between 1 and 5);
@@ -35,6 +50,7 @@ alter table public.matches add constraint matches_best_of_legs_check check (best
 alter table public.players enable row level security;
 alter table public.matches enable row level security;
 alter table public.club_signups enable row level security;
+alter table public.member_player_profiles enable row level security;
 
 drop policy if exists "Signed-in members can manage shared players" on public.players;
 create policy "Signed-in members can manage shared players"
@@ -71,3 +87,57 @@ create policy "Members can manage their own club signups"
   with check (signed_up_by = (select auth.uid()));
 
 grant select, insert, update, delete on public.club_signups to authenticated;
+
+drop policy if exists "Members can manage their own player profile link" on public.member_player_profiles;
+create policy "Members can manage their own player profile link"
+  on public.member_player_profiles
+  for all
+  to authenticated
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()));
+
+grant select, insert, update, delete on public.member_player_profiles to authenticated;
+
+drop policy if exists "Members can view their own profile avatar" on storage.objects;
+create policy "Members can view their own profile avatar"
+  on storage.objects
+  for select
+  to authenticated
+  using (
+    bucket_id = 'profile-avatars'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
+  );
+
+drop policy if exists "Members can upload their own profile avatar" on storage.objects;
+create policy "Members can upload their own profile avatar"
+  on storage.objects
+  for insert
+  to authenticated
+  with check (
+    bucket_id = 'profile-avatars'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
+  );
+
+drop policy if exists "Members can update their own profile avatar" on storage.objects;
+create policy "Members can update their own profile avatar"
+  on storage.objects
+  for update
+  to authenticated
+  using (
+    bucket_id = 'profile-avatars'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
+  )
+  with check (
+    bucket_id = 'profile-avatars'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
+  );
+
+drop policy if exists "Members can delete their own profile avatar" on storage.objects;
+create policy "Members can delete their own profile avatar"
+  on storage.objects
+  for delete
+  to authenticated
+  using (
+    bucket_id = 'profile-avatars'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
+  );

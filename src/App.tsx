@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { getCheckoutHint } from './checkout'
-import { deleteClubSignup, deleteSavedMatch, deleteSavedPlayer, loadClubSignups, loadSavedData, saveClubSignup, saveFinishedMatch, savePlayers, sendMatchReport, syncPendingChanges } from './database'
+import { deleteClubSignup, deleteSavedMatch, deleteSavedPlayer, loadClubSignups, loadLinkedPlayerProfile, loadSavedData, saveClubSignup, saveFinishedMatch, saveLinkedPlayerId, savePlayers, sendMatchReport, syncPendingChanges, uploadProfileAvatar } from './database'
 import type { ClubSignup, SavedData } from './database'
 import { supabase } from './supabase'
 import type { Session } from '@supabase/supabase-js'
@@ -17,7 +17,7 @@ type Player = { id: string; name: string; score: number; visits: Visit[]; teamId
 type Snapshot = { players: Player[]; activePlayer: number; winnerId: string | null; legsWon: Record<string, number>; matchWinnerId: string | null }
 type EntryMode = 'darts' | 'total'
 type GamePhase = 'setup' | 'bull-off' | 'leg-bull-off' | 'playing'
-type AppSection = 'scoreboard' | 'club-evenings'
+type AppSection = 'scoreboard' | 'club-evenings' | 'profile'
 type CoinSide = 'kron' | 'mynt'
 type CourtNumber = 1 | 2 | 3 | 4 | 5
 
@@ -166,6 +166,38 @@ function formatClubDate(date: string): string {
   return `${formattedDate.charAt(0).toLocaleUpperCase('nb-NO')}${formattedDate.slice(1)}`
 }
 
+function summarizeCareer(matches: SavedData['matches'], playerId: string) {
+  const playerNameKey = playerId.trim().toLowerCase()
+  const appearances = matches.flatMap((match) => {
+    const player = match.players.find((candidate) => candidate.name.trim().toLowerCase() === playerNameKey)
+    return player ? [{ match, player }] : []
+  })
+  const wins = appearances.filter(({ match, player }) => {
+    if (match.winnerName === player.name) return true
+    if (!player.teamId) return false
+    const teamName = match.players
+      .filter((teammate) => teammate.teamId === player.teamId)
+      .map((teammate) => teammate.name)
+      .join(' + ')
+    return teamName !== '' && match.winnerName === teamName
+  }).length
+  const dartsThrown = appearances.reduce((total, { player }) => total + (player.dartsThrown ?? 0), 0)
+  const pointsScored = appearances.reduce((total, { player }) => total + (player.pointsScored ?? 0), 0)
+  const tons = appearances.reduce((total, { player }) => total + (player.tons ?? 0), 0)
+  const oneEighties = appearances.reduce((total, { player }) => total + (player.oneEighties ?? 0), 0)
+  const highestVisit = Math.max(0, ...appearances.map(({ player }) => player.highestVisit ?? 0))
+
+  return {
+    matches: appearances.length,
+    wins,
+    average3: dartsThrown > 0 ? (pointsScored / dartsThrown) * 3 : 0,
+    dartsThrown,
+    tons,
+    oneEighties,
+    highestVisit,
+  }
+}
+
 function App() {
   const [appSection, setAppSection] = useState<AppSection>('scoreboard')
   const [playerCount, setPlayerCount] = useState(2)
@@ -227,8 +259,26 @@ function App() {
   const [clubSignupName, setClubSignupName] = useState('')
   const [clubSignupMessage, setClubSignupMessage] = useState('')
   const [clubSignupBusy, setClubSignupBusy] = useState(false)
+  const [linkedPlayerId, setLinkedPlayerId] = useState<string | null>(null)
+  const [profilePlayerId, setProfilePlayerId] = useState('')
+  const [profileLoading, setProfileLoading] = useState(false)
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileMessage, setProfileMessage] = useState('')
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null)
+  const [profileAvatarBusy, setProfileAvatarBusy] = useState(false)
 
   const upcomingClubDates = getUpcomingClubDates()
+  const profilePlayers = Array.from(new Map([
+    ...savedData.players,
+    ...savedData.matches.flatMap((match) => match.players.map((player) => ({
+      id: player.name.trim().toLowerCase(),
+      name: player.name,
+      lastPlayedAt: match.playedAt,
+    }))),
+  ].map((player) => [player.id, player])).values())
+    .sort((first, second) => first.name.localeCompare(second.name, 'nb'))
+  const linkedPlayer = profilePlayers.find((player) => player.id === linkedPlayerId)
+  const careerStats = linkedPlayerId ? summarizeCareer(savedData.matches, linkedPlayerId) : null
   const currentClubSignup = clubSignups.find((signup) => signup.eventDate === clubSignupDate && (
     supabase ? signup.signedUpBy === session?.user.id : signup.playerName.toLocaleLowerCase('nb-NO') === clubSignupName.trim().toLocaleLowerCase('nb-NO')
   ))
@@ -284,6 +334,25 @@ function App() {
     })
     return () => { mounted = false }
   }, [session])
+
+  useEffect(() => {
+    if (appSection !== 'profile' || !supabase || !session) return
+    let mounted = true
+    setProfileLoading(true)
+    setProfileMessage('')
+    void loadLinkedPlayerProfile(session.user.id).then((profile) => {
+      if (mounted) {
+        setLinkedPlayerId(profile.playerId)
+        setProfilePlayerId(profile.playerId ?? '')
+        setProfileAvatarUrl(profile.avatarUrl)
+      }
+    }).catch(() => {
+      if (mounted) setProfileMessage('Kunne ikke hente profilen. Kontroller at profiltabellen er satt opp i Supabase.')
+    }).finally(() => {
+      if (mounted) setProfileLoading(false)
+    })
+    return () => { mounted = false }
+  }, [appSection, session])
 
   useEffect(() => {
     if (appSection !== 'club-evenings' || (supabase && !session)) return
@@ -957,12 +1026,74 @@ function App() {
         <div className="topbar-actions">
           <div className="topbar-meta">{isOnline ? <span className="live-dot" /> : <span className="offline-dot" />} {isOnline ? gameMode === 'cricket' ? 'CRICKET' : `${gameMode} / DOBBEL UT` : 'OFFLINE'} <span className="court-indicator">BANE {courtNumber}</span>{!supabase && <span className="local-mode-tag">LOKAL MODUS</span>}</div>
           <button className="club-menu-button" type="button" aria-current={appSection === 'club-evenings' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'club-evenings' ? 'scoreboard' : 'club-evenings')}>{appSection === 'club-evenings' ? 'Poengtavle' : 'Påmelding'}</button>
+          {session && <button className="club-menu-button profile-menu-button" type="button" aria-current={appSection === 'profile' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'profile' ? 'scoreboard' : 'profile')}>Min statistikk</button>}
           {session && <button className="sign-out-button" type="button" onClick={signOut}>Logg ut</button>}
         </div>
       </header>
       {databaseMessage && <div className="database-message" role="status"><span>{databaseMessage}</span><button type="button" aria-label="Skjul varsel" onClick={() => setDatabaseMessage('')}>Lukk</button></div>}
 
-      {appSection === 'club-evenings' ? (
+      {appSection === 'profile' && session ? (
+        <section className="player-profile-page">
+          <div className="club-evenings-heading">
+            <p className="eyebrow">STEINKJER DART-X / SPILLERPROFIL</p>
+            <h1>Min statistikk<span className="title-period">.</span></h1>
+            <p className="intro">Samlet oversikt over kampene og kastene dine.</p>
+          </div>
+          <section className="player-profile-card">
+            <p className="eyebrow">KNYTT INNLOGGING TIL SPILLER</p>
+            <div className="profile-identity">
+              {profileAvatarUrl
+                ? <img className="profile-avatar" src={profileAvatarUrl} alt={`Profilbilde for ${linkedPlayer?.name ?? 'din profil'}`} />
+                : <div className="profile-avatar profile-avatar-placeholder" aria-hidden="true">{linkedPlayer?.name.slice(0, 1).toLocaleUpperCase('nb-NO') ?? '?'}</div>}
+              <h2>{linkedPlayer?.name ?? 'Velg spillerprofil'}</h2>
+            </div>
+            <p className="profile-account-label">{session.user.email}</p>
+            {profileLoading ? <p role="status">Henter spillerprofil …</p> : <>
+              <label className="club-signup-field"><span>SPILLERNAVN</span><select value={profilePlayerId} onChange={(event) => { setProfilePlayerId(event.target.value); setProfileMessage('') }}><option value="">Velg navnet ditt</option>{profilePlayers.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select></label>
+              <button className="primary-button profile-save-button" type="button" disabled={!profilePlayerId || profileSaving || (Boolean(supabase) && !isOnline)} onClick={() => {
+                if (!session || !profilePlayerId) return
+                setProfileSaving(true)
+                setProfileMessage('')
+                void saveLinkedPlayerId(session.user.id, profilePlayerId).then(() => {
+                  setLinkedPlayerId(profilePlayerId)
+                  setProfileMessage('Spillerprofilen er lagret.')
+                }).catch((error: unknown) => {
+                  setProfileMessage(error instanceof Error ? error.message : 'Spillerprofilen kunne ikke lagres.')
+                }).finally(() => setProfileSaving(false))
+              }}>{profileSaving ? 'LAGRER …' : linkedPlayerId ? 'Lagre spillerprofil' : 'Knytt til spillerprofil'}<span aria-hidden="true">↗</span></button>
+              <label className={`profile-avatar-upload${!linkedPlayerId || profileAvatarBusy || !isOnline ? ' is-disabled' : ''}`}>
+                <span>{profileAvatarBusy ? 'LASTER OPP …' : profileAvatarUrl ? 'Bytt profilbilde' : 'Last opp profilbilde'}</span>
+                <input type="file" accept="image/jpeg,image/png,image/webp" disabled={!linkedPlayerId || profileAvatarBusy || !isOnline} onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  event.target.value = ''
+                  if (!file || !session) return
+                  setProfileAvatarBusy(true)
+                  setProfileMessage('')
+                  void uploadProfileAvatar(session.user.id, file).then((avatarUrl) => {
+                    setProfileAvatarUrl(avatarUrl)
+                    setProfileMessage('Profilbildet er lastet opp.')
+                  }).catch((error: unknown) => {
+                    setProfileMessage(error instanceof Error ? error.message : 'Profilbildet kunne ikke lastes opp.')
+                  }).finally(() => setProfileAvatarBusy(false))
+                }} />
+              </label>
+              <p className="profile-avatar-note">JPG, PNG eller WebP · maks 2 MB. Bildet er privat for kontoen din.</p>
+              {profilePlayers.length === 0 && <p>Det er ingen spillerprofiler i arkivet ennå. Legg til spilleren i spillerlisten eller registrer en kamp først.</p>}
+              {profileMessage && <p className="profile-message" role="status">{profileMessage}</p>}
+              {supabase && !isOnline && <p className="profile-message">Du må være på nett for å lagre profilkoblingen eller laste opp bilde.</p>}
+            </>}
+            {careerStats && linkedPlayer && <div className="career-stats" aria-label={`Samlet statistikk for ${linkedPlayer.name}`}>
+              <div><strong>{careerStats.matches}</strong><span>KAMPER</span></div>
+              <div><strong>{careerStats.wins}</strong><span>SEIERE</span></div>
+              <div><strong>{careerStats.average3.toFixed(1)}</strong><span>3-PILSSNITT</span></div>
+              <div><strong>{careerStats.tons}</strong><span>100+</span></div>
+              <div><strong>{careerStats.oneEighties}</strong><span>180-ERE</span></div>
+              <div><strong>{careerStats.highestVisit}</strong><span>HØYESTE TUR</span></div>
+              <p>{careerStats.dartsThrown} piler registrert i kamparkivet.</p>
+            </div>}
+          </section>
+        </section>
+      ) : appSection === 'club-evenings' ? (
         <section className="club-evenings-page">
           <div className="club-evenings-heading">
             <p className="eyebrow">STEINKJER DART-X / KLUBB</p>

@@ -35,6 +35,8 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .club-menu-button { min-height: 35px; padding: 0 13px; border: 1px solid var(--green); background: var(--green); color: white; font-size: 12px; font-weight: 700; cursor: pointer; }
 .club-menu-button:hover { background: var(--green-dark); }
 .club-menu-button[aria-current="page"] { border-color: var(--line); background: transparent; color: var(--green); }
+.profile-menu-button { background: transparent; color: var(--green); }
+.profile-menu-button:hover { background: #175c4510; }
 .club-evenings-page { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 390px); align-items: center; gap: 8vw; max-width: 1180px; min-height: calc(100vh - 180px); margin: 0 auto; padding: 50px 0 75px; }
 .club-evenings-heading h1 { margin: 0; font-family: var(--serif); font-size: clamp(52px, 9vw, 108px); font-weight: 500; line-height: .98; }
 .club-evenings-heading .intro { margin-top: 24px; }
@@ -57,6 +59,29 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .club-attendees ul { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
 .club-attendees li { display: flex; align-items: center; justify-content: space-between; gap: 9px; color: var(--ink); font-size: 12px; }
 .club-local-note { margin: 16px 0 0; }
+.player-profile-page { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 460px); align-items: center; gap: 8vw; max-width: 1180px; min-height: calc(100vh - 180px); margin: 0 auto; padding: 50px 0 75px; }
+.player-profile-page .club-evenings-heading h1 { max-width: 520px; }
+.player-profile-card { padding: 27px 29px; border: 1px solid #d0d0c6; background: #f8f6efeb; box-shadow: 9px 10px 0 #175c450e; }
+.player-profile-card > .eyebrow { margin-bottom: 8px; }
+.player-profile-card > h2 { margin: 0; font-family: var(--serif); font-size: 27px; font-weight: 500; }
+.profile-account-label { margin: 4px 0 20px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.profile-identity { display: flex; align-items: center; gap: 13px; }
+.profile-identity h2 { min-width: 0; overflow-wrap: anywhere; }
+.profile-avatar { width: 68px; height: 68px; flex: none; border: 1px solid var(--line); border-radius: 50%; background: #fffefa; object-fit: cover; }
+.profile-avatar-placeholder { display: grid; place-items: center; color: var(--green); font: 26px var(--mono); }
+.profile-save-button { width: 100%; }
+.profile-avatar-upload { position: relative; min-height: 42px; display: grid; place-items: center; margin-top: 10px; border: 1px solid var(--green); color: var(--green); font-size: 12px; font-weight: 700; cursor: pointer; }
+.profile-avatar-upload:hover { background: #175c4510; }
+.profile-avatar-upload input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.profile-avatar-upload.is-disabled { cursor: not-allowed; opacity: .5; }
+.profile-avatar-upload.is-disabled input { cursor: not-allowed; }
+.profile-avatar-note { margin: 7px 0 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.profile-message { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.career-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin-top: 20px; border: 1px solid var(--line); background: var(--line); }
+.career-stats > div { min-height: 68px; display: grid; align-content: center; gap: 4px; padding: 8px; background: #fffefa; }
+.career-stats strong { color: var(--green); font: 20px var(--mono); }
+.career-stats span { color: var(--muted); font: 8px var(--mono); letter-spacing: .5px; }
+.career-stats > p { grid-column: 1 / -1; margin: 0; padding: 9px; background: #fffefa; color: var(--muted); font-size: 10px; }
 .court-indicator { padding: 4px 6px; border: 1px solid var(--line); color: var(--green); font: 9px var(--mono); white-space: nowrap; }
 .local-mode-tag { padding: 4px 6px; border: 1px solid var(--line); color: var(--muted); font-size: 8px; }
 .offline-dot { display: inline-block; width: 7px; aspect-ratio: 1; border-radius: 50%; background: var(--orange); box-shadow: 0 0 0 3px #ec68481c; }
@@ -356,6 +381,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 @keyframes rise-in { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
 @media (max-width: 760px) {
   .club-evenings-page { grid-template-columns: minmax(0, 1fr); gap: 24px; min-height: auto; padding: 40px 0 55px; }
+  .player-profile-page { grid-template-columns: minmax(0, 1fr); gap: 24px; min-height: auto; padding: 40px 0 55px; }
   .app-shell { padding: 0 22px 32px; }
   .topbar { min-height: 65px; }
   .topbar-actions { gap: 6px; }
@@ -408,6 +434,9 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
   .submit-score { grid-column: 2 / 4; width: 100%; }
 }
 @media (max-width: 480px) {
+  .topbar { flex-wrap: wrap; gap: 8px; padding: 10px 0; }
+  .topbar-actions { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
+  .topbar-actions .club-menu-button { min-height: 30px; padding: 0 7px; font-size: 10px; }
   .app-shell { padding-right: 16px; padding-left: 16px; }
   .brand { font-size: 11px; letter-spacing: 1.2px; }
   .topbar { min-height: 59px; }
