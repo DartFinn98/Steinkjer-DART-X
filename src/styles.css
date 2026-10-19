@@ -289,14 +289,16 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .bull-winner-field > span { color: var(--muted); font: 10px var(--mono); letter-spacing: 1px; }
 .bull-winner-field select { width: 100%; min-height: 44px; padding: 0 10px; border: 1px solid var(--line); border-radius: 0; background: #fffefa; color: var(--ink); }
 .bull-back-button { margin-top: 9px; }
-.bull-off-panel > .coin-toss-button { margin: 18px 0 8px; }
 .bull-toss-note { margin: 0 0 8px; color: var(--muted); font-size: 11px; }
+.bull-winner-choices { display: grid; gap: 9px; margin-top: 18px; }
+.bull-winner-choices button { min-height: 52px; padding: 10px 14px; border: 1px solid var(--green); background: var(--green); color: #fffefa; font-size: 15px; font-weight: 700; text-align: left; cursor: pointer; }
+.bull-winner-choices button:hover { background: #124b39; }
+.bull-winner-choices button:focus-visible { outline: 3px solid var(--orange); outline-offset: 3px; }
+.bull-undo-button { margin-top: 13px; }
 .bull-trigger { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-bottom: 16px; padding: 13px 15px; border: 1px solid #ec684866; background: #f8f6ef; }
 .bull-trigger > div { display: grid; gap: 5px; }
 .bull-trigger > div > span { color: var(--orange); font: 10px var(--mono); letter-spacing: 1px; }
 .bull-trigger > div > strong { font-size: 13px; }
-.bull-trigger-button { min-height: 39px; flex: none; padding: 0 13px; border: 1px solid var(--orange); background: var(--orange); color: white; font-size: 12px; font-weight: 700; cursor: pointer; }
-.bull-trigger-button:hover { background: #d85838; }
 .saved-history { grid-column: 1 / -1; align-self: start; justify-self: center; width: min(100%, 860px); padding-top: 12px; }
 .saved-history-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; padding-bottom: 12px; }
 .saved-history-heading .eyebrow { margin-bottom: 5px; }

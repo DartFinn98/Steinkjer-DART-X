@@ -83,4 +83,4 @@ I Cricket teller feltene 15–20 og bull. Tre treff lukker et felt; dobbel telle
 
 Når du registrerer en totalsum, må du også merke av hvis den siste pilen traff en dobbel for å fullføre en utgang.
 
-Kampen starter med et bullkast. Spilleren som kommer nærmest bull, begynner. I kamper med flere legger starter neste legg med den neste spilleren i rekkefølgen. Når en spiller står igjen med nøyaktig 42 poeng, kan dere avgjøre leggen med et nytt bullkast.
+Kampen starter med et bullkast. Spilleren som kommer nærmest bull, begynner. I kamper med flere legger starter neste legg med den neste spilleren i rekkefølgen. Hvis en 501-legg ikke er avgjort etter at hver spiller har kastet 42 piler, avgjøres leggen med bull-off: kast mot bull, og trykk på navnet til spilleren som kom nærmest.

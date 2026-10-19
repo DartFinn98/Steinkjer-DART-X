@@ -28,6 +28,14 @@ type CoinSide = 'kron' | 'mynt'
 type CourtNumber = 1 | 2 | 3 | 4 | 5
 type Visit = TournamentGamePlayer['visits'][number]
 
+function getLegDartsThrown(players: Player[], legNumber: number, playerId?: string): number {
+  return players
+    .filter((player) => playerId === undefined || player.id === playerId)
+    .flatMap((player) => player.visits)
+    .filter((visit) => visit.legNumber === legNumber)
+    .reduce((total, visit) => total + visit.dartsThrown, 0)
+}
+
 function getSavedCourtNumber(): CourtNumber {
   try {
     const savedCourtNumber = Number(window.localStorage.getItem('darttavla-court-number'))
@@ -796,6 +804,10 @@ function App() {
   const roundWordLower = gameMode === '121' ? 'runde' : 'legg'
   const roundWordPlural = gameMode === '121' ? 'runder' : 'legger'
   const checkoutHint = currentPlayer && gameMode !== 'cricket' ? getCheckoutHint(currentPlayer.score) : null
+  const dartLimitBullOff = gameMode === '501'
+    && players.length > 1
+    && !teamMode
+    && players.every((player) => getLegDartsThrown(players, legNumber, player.id) >= 42)
   const names = Array.from({ length: playerCount }, (_, index) => playerNames[index] ?? '')
   const normalizedHistorySearch = historySearch.trim().toLocaleLowerCase('nb-NO')
   const filteredSavedMatches = savedData.matches.filter((match) => {
@@ -1071,24 +1083,12 @@ function App() {
     }
   }
 
-  function beginLegBullOff() {
-    if (players.length < 2 || !players.some((player) => player.score === 42)) return
-    setCoinResult(null)
-    setCoinStarterIndex(useCoinToss ? null : 0)
-    setBullWinnerId('')
-    setGamePhase('leg-bull-off')
-    persistCurrentTournamentProgress({
-      gamePhase: 'leg-bull-off',
-      coinStarterIndex: useCoinToss ? null : 0,
-      bullWinnerId: '',
-    })
-  }
-
-  function finishLegBullOff() {
-    const legWinner = players.find((player) => player.id === bullWinnerId)
-    if (!legWinner || !players.some((player) => player.score === 42)) return
+  function finishLegBullOff(legWinnerId: string) {
+    const legWinner = players.find((player) => player.id === legWinnerId)
+    if (!legWinner || gamePhase !== 'leg-bull-off' || (!dartLimitBullOff && !players.some((player) => player.score === 42))) return
     const nextHistory = [...history, { players, activePlayer, winnerId, legsWon, matchWinnerId }]
     setHistory(nextHistory)
+    setBullWinnerId(legWinner.id)
     finishLeg(legWinner.id, players, 'bull-off', activePlayer, nextHistory.at(-1) ?? null)
   }
 
@@ -1184,16 +1184,29 @@ function App() {
 
     const nextHistory = [...history, { players, activePlayer, winnerId, legsWon, matchWinnerId }]
     const nextActivePlayer = (activePlayer + 1) % players.length
+    const nextLegNumber = legScorePlayers.reduce((total, player) => total + (legsWon[player.id] ?? 0), 0) + 1
+    const shouldStartDartLimitBullOff = !checkout
+      && gameMode === '501'
+      && !teamMode
+      && players.length > 1
+      && nextPlayers.every((player) => getLegDartsThrown(nextPlayers, nextLegNumber, player.id) >= 42)
     setHistory(nextHistory)
     setPlayers(nextPlayers)
     setActivePlayer(nextActivePlayer)
     if (checkout) finishLeg(currentPlayer.id, nextPlayers, 'checkout', nextActivePlayer, nextHistory.at(-1) ?? null)
     else {
       setWinnerId(null)
+      if (shouldStartDartLimitBullOff) {
+        setGamePhase('leg-bull-off')
+        setBullWinnerId('')
+        setMessage('Alle spillerne har brukt 42 piler uten avgjørelse. Velg den som kom nærmest bull.')
+      }
       persistCurrentTournamentProgress({
         players: nextPlayers,
         activePlayer: nextActivePlayer,
         winnerId: null,
+        gamePhase: shouldStartDartLimitBullOff ? 'leg-bull-off' : 'playing',
+        bullWinnerId: shouldStartDartLimitBullOff ? '' : bullWinnerId,
       }, nextHistory.at(-1) ?? null)
     }
     setDarts(['', '', ''])
@@ -1201,7 +1214,7 @@ function App() {
     setManualDartsThrown(3)
     setManualLastDartDouble(false)
     setManualBust(false)
-    setMessage(bust ? `${currentPlayer.name} gikk bust. Poengsummen står.` : '')
+    if (!shouldStartDartLimitBullOff) setMessage(bust ? `${currentPlayer.name} gikk bust. Poengsummen står.` : '')
   }
 
   function undoVisit() {
@@ -1212,7 +1225,11 @@ function App() {
     setWinnerId(previous.winnerId)
     setLegsWon(previous.legsWon)
     setMatchWinnerId(previous.matchWinnerId)
-    setGamePhase('playing')
+    const restoredDartLimitBullOff = gameMode === '501'
+      && !teamMode
+      && players.length > 1
+      && previous.players.every((player) => getLegDartsThrown(previous.players, legNumber, player.id) >= 42)
+    setGamePhase(restoredDartLimitBullOff ? 'leg-bull-off' : 'playing')
     const nextHistory = history.slice(0, -1)
     setHistory(nextHistory)
     setDarts(['', '', ''])
@@ -1227,7 +1244,7 @@ function App() {
       winnerId: previous.winnerId,
       legsWon: previous.legsWon,
       matchWinnerId: previous.matchWinnerId,
-      gamePhase: 'playing',
+      gamePhase: restoredDartLimitBullOff ? 'leg-bull-off' : 'playing',
       previousState: nextHistory.at(-1) ?? null,
     }, nextHistory.at(-1) ?? null)
   }
@@ -2218,20 +2235,16 @@ function App() {
       ) : gamePhase === 'leg-bull-off' ? (
         <section className="bull-off-layout">
           <div className="bull-off-copy">
-            <p className="eyebrow">42-REGEL / AVGJØR LEGG</p>
+            <p className="eyebrow">42-PILERSREGEL / AVGJØR LEGG</p>
             <h1>BULL<span className="title-period">.</span></h1>
-            <p className="intro">{useCoinToss ? 'Myntkastet avgjør hvem som kaster mot bull først.' : 'Spillerrekkefølgen avgjør hvem som kaster mot bull først.'} Velg spilleren som kommer nærmest.</p>
-            <div className="rules-line"><span>42 IGJEN</span><i /> BULLKAST AVGJØR LEGGVINNEREN</div>
+            <p className="intro">{dartLimitBullOff ? 'Ingen har avgjort 501-leggen etter 42 piler hver. Kast mot bull, og velg spilleren som kom nærmest.' : 'Leggen avgjøres med et bullkast. Trykk på spilleren som kom nærmest bull.'}</p>
+            <div className="rules-line"><span>42 PILER HVER</span><i /> BULLKAST AVGJØR LEGGVINNEREN</div>
           </div>
           <div className="bull-off-panel">
-            <div className="panel-heading"><div><p className="eyebrow">KASTEREKKEFØLGE</p><h2>Hvem kom nærmest bull?</h2></div><span className="panel-index">BULL / 42</span></div>
-            {useCoinToss ? <><p className="bull-toss-note">Kast mynten for å trekke første kaster.</p>
-              <CoinTossButton disabled={false} flipping={coinFlipping} landingSide={coinLandingSide} result={coinResult} onClick={tossCoin} />
-              <p className="bull-toss-note" role="status">{coinFlipping ? 'Mynten snurrer …' : coinResult === null ? 'Mynten trekker tilfeldig hvem som kaster først.' : `${coinResult === 'kron' ? 'Kron' : 'Mynt'} kom opp. ${bullThrowOrder[0]?.name} kaster først.`}</p></> : <p className="bull-toss-note" role="status">Myntkast er av. {bullThrowOrder[0]?.name} kaster først mot bull.</p>}
-            {coinStarterIndex !== null && <ol className="bull-order">{bullThrowOrder.map((player, index) => <li key={player.id}><span className="bull-order-number">{String(index + 1).padStart(2, '0')}</span><strong>{player.name}</strong>{index === 0 && <span className="bull-first-tag">KASTER FØRST</span>}</li>)}</ol>}
-            <label className="bull-winner-field"><span>HVEM KOM NÆRMEST BULL?</span><select required value={bullWinnerId} onChange={(event) => setBullWinnerId(event.target.value)}><option value="" disabled>Velg spiller</option>{players.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select></label>
-            <button className="primary-button start-button" type="button" disabled={!bullWinnerId || (useCoinToss && coinStarterIndex === null)} onClick={finishLegBullOff}>Avgjør leggen <span aria-hidden="true">↗</span></button>
-            <button className="text-button bull-back-button" type="button" onClick={() => { cancelCoinFlip(); setBullWinnerId(''); setCoinStarterIndex(null); setCoinResult(null); setGamePhase('playing') }}>Fortsett å spille</button>
+            <div className="panel-heading"><div><p className="eyebrow">BULL-OFF</p><h2>Trykk på den som kom nærmest</h2></div><span className="panel-index">BULL / 42</span></div>
+            <p className="bull-toss-note" role={dartLimitBullOff ? 'alert' : 'status'}>{dartLimitBullOff ? 'Varsel: Alle spillerne har kastet 42 piler uten å avgjøre leggen.' : 'Kast mot bull for å avgjøre leggen.'}</p>
+            <div className="bull-winner-choices" role="group" aria-label="Velg spilleren som kom nærmest bull">{players.map((player) => <button key={player.id} type="button" onClick={() => finishLegBullOff(player.id)}>{player.name}</button>)}</div>
+            <button className="text-button bull-undo-button" type="button" onClick={undoVisit}>Angre siste tur</button>
           </div>
         </section>
       ) : (
@@ -2244,7 +2257,7 @@ function App() {
             </div>
           </div>
           {activeTournamentMatch && <div className={`tournament-resume-status${tournamentMatchMessage.includes('ikke') ? ' is-error' : ''}`} role={tournamentMatchMessage.includes('ikke') ? 'alert' : 'status'}><span>{tournamentMatchMessage || 'Turneringskampen lagres automatisk, så den kan fortsettes senere.'}</span>{tournamentMatchMessage.includes('gjenopptakelse') && !matchWinnerId && <button className="text-button" type="button" onClick={retryTournamentProgressSave}>Prøv lagring på nytt</button>}</div>}
-          {gameMode === '501' && !winnerId && players.length > 1 && players.some((player) => player.score === 42) && <div className="bull-trigger" role="status"><div><span>42 IGJEN</span><strong>Vil dere avgjøre leggen med et kast på bull?</strong></div><button className="bull-trigger-button" type="button" onClick={beginLegBullOff}>Avgjør på bull</button></div>}
+          {gameMode === '501' && dartLimitBullOff && !winnerId && <div className="bull-trigger" role="alert"><div><span>42 PILER HVER BRUKT</span><strong>Leggen er ikke avgjort. Kast mot bull, og trykk på navnet til den som kom nærmest.</strong></div></div>}
           <div className={`player-grid players-${players.length}`}>
             {players.map((player, index) => {
               const isActive = index === activePlayer && !winnerId
