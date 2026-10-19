@@ -23,15 +23,22 @@ button, input { font: inherit; }
 button { color: inherit; }
 button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outline-offset: 3px; }
 .app-shell { min-height: 100vh; padding: 0 7.2vw 44px; }
-.topbar { min-height: 76px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
+.topbar { min-height: 76px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 22px; border-bottom: 1px solid var(--line); }
 .brand { display: inline-flex; align-items: center; gap: 11px; color: var(--ink); font-size: 13px; font-weight: 850; letter-spacing: 1.8px; text-decoration: none; }
 .brand-logo { width: 38px; aspect-ratio: 1; border-radius: 8px; object-fit: cover; }
 .brand-dot, .title-period { color: var(--orange); }
 .topbar-meta, .eyebrow, .rules-line, .player-number, .turn-tag, .winner-tag, .player-card-bottom, .name-field > span, .player-count legend, .dart-input > span, .visit-total > span, .game-footer, .dart-counter { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 1.1px; }
 .topbar-meta { display: flex; align-items: center; gap: 9px; color: var(--muted); }
-.topbar-meta .sign-out-button { min-height: 30px; padding: 0 9px; border: 1px solid var(--line); background: transparent; color: var(--green); font-size: 10px; font-weight: 700; cursor: pointer; }
-.topbar-meta .sign-out-button:hover { border-color: var(--green); }
-.topbar-actions { display: flex; align-items: center; gap: 12px; }
+.topbar-nav { display: flex; align-items: center; justify-content: center; gap: 0; min-width: 0; }
+.topbar-nav-group { display: flex; align-items: center; gap: 4px; }
+.topbar-nav-group + .topbar-nav-group { margin-left: 12px; padding-left: 12px; border-left: 1px solid var(--line); }
+.topbar-nav-link { position: relative; min-height: 42px; padding: 0 12px; border: 0; background: transparent; color: #51594f; font-size: 12px; font-weight: 650; white-space: nowrap; cursor: pointer; transition: color 140ms, background 140ms; }
+.topbar-nav-link:hover { background: #175c4509; color: var(--green); }
+.topbar-nav-link[aria-current="page"] { color: var(--green); }
+.topbar-nav-link[aria-current="page"]::after { position: absolute; right: 12px; bottom: 3px; left: 12px; height: 2px; background: var(--orange); content: ''; }
+.topbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.topbar-actions .sign-out-button { min-height: 32px; padding: 0 10px; border: 1px solid var(--line); background: transparent; color: var(--green); font-size: 11px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+.topbar-actions .sign-out-button:hover { border-color: var(--green); background: #175c4509; }
 .club-menu-button { min-height: 35px; padding: 0 13px; border: 1px solid var(--green); background: var(--green); color: white; font-size: 12px; font-weight: 700; cursor: pointer; }
 .club-menu-button:hover { background: var(--green-dark); }
 .club-menu-button[aria-current="page"] { border-color: var(--line); background: transparent; color: var(--green); }
@@ -505,7 +512,13 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
   .admin-signup-edit .admin-signup-actions { grid-column: 1 / -1; }
   .player-profile-page { grid-template-columns: minmax(0, 1fr); gap: 24px; min-height: auto; padding: 40px 0 55px; }
   .app-shell { padding: 0 22px 32px; }
-  .topbar { min-height: 65px; }
+  .topbar { min-height: 65px; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; padding: 9px 0 0; }
+  .topbar-nav { grid-column: 1 / -1; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; }
+  .topbar-nav::-webkit-scrollbar { display: none; }
+  .topbar-nav-group { flex: none; }
+  .topbar-nav-group + .topbar-nav-group { margin-left: 7px; padding-left: 7px; }
+  .topbar-nav-link { min-height: 39px; padding: 0 10px; font-size: 11px; }
+  .topbar-nav-link[aria-current="page"]::after { right: 10px; bottom: 1px; left: 10px; }
   .topbar-actions { gap: 6px; }
   .topbar-meta { display: none; }
   .topbar-actions .sign-out-button { min-height: 30px; padding: 0 7px; font-size: 9px; }
@@ -558,9 +571,10 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
   .submit-score { grid-column: 2 / 4; width: 100%; }
 }
 @media (max-width: 480px) {
-  .topbar { flex-wrap: wrap; gap: 8px; padding: 10px 0; }
-  .topbar-actions { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
-  .topbar-actions .club-menu-button { min-height: 30px; padding: 0 7px; font-size: 10px; }
+  .topbar { gap: 3px 6px; padding-top: 8px; }
+  .topbar-nav { margin: 0 -2px; }
+  .topbar-nav-link { padding: 0 9px; font-size: 10px; }
+  .topbar-actions { margin-left: auto; }
   .app-shell { padding-right: 16px; padding-left: 16px; }
   .brand { font-size: 11px; letter-spacing: 1.2px; }
   .topbar { min-height: 59px; }

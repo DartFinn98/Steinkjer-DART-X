@@ -2031,13 +2031,19 @@ function App() {
           <img className="brand-logo" src="/logo.png" alt="" />
           <span>STEINKJER <span className="brand-dot">DART-X</span></span>
         </a>
+        <nav className="topbar-nav" aria-label="Hovedmeny">
+          <div className="topbar-nav-group" aria-label="Klubb">
+            <button className="topbar-nav-link" type="button" aria-current={appSection === 'players' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'players' ? 'scoreboard' : 'players')}>Spillere</button>
+            {(!guestName || session) && <button className="topbar-nav-link" type="button" aria-current={appSection === 'club-evenings' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'club-evenings' ? 'scoreboard' : 'club-evenings')}>{appSection === 'club-evenings' ? 'Poengtavle' : 'Påmelding'}</button>}
+          </div>
+          {session && <div className="topbar-nav-group" aria-label="Konto og turnering">
+            <button className="topbar-nav-link" type="button" aria-current={appSection === 'profile' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'profile' ? 'scoreboard' : 'profile')}>Min statistikk</button>
+            <button className="topbar-nav-link" type="button" aria-current={appSection === 'tournament' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'tournament' ? 'scoreboard' : 'tournament')}>Turnering</button>
+            {isClubAdmin && <button className="topbar-nav-link" type="button" aria-current={appSection === 'admin' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'admin' ? 'scoreboard' : 'admin')}>Administrasjon</button>}
+          </div>}
+        </nav>
         <div className="topbar-actions">
           <div className="topbar-meta">{isOnline ? <span className="live-dot" /> : <span className="offline-dot" />} {isOnline ? gameMode === 'cricket' ? 'CRICKET' : `${gameMode} / DOBBEL UT` : 'OFFLINE'} <span className="court-indicator">BANE {courtNumber}</span>{(guestName || !supabase) && <span className="local-mode-tag">{guestName ? `GJEST: ${guestName}` : 'LOKAL MODUS'}</span>}</div>
-          <button className="club-menu-button profile-menu-button" type="button" aria-current={appSection === 'players' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'players' ? 'scoreboard' : 'players')}>Spillere</button>
-          {(!guestName || session) && <button className="club-menu-button" type="button" aria-current={appSection === 'club-evenings' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'club-evenings' ? 'scoreboard' : 'club-evenings')}>{appSection === 'club-evenings' ? 'Poengtavle' : 'Påmelding'}</button>}
-          {session && <button className="club-menu-button profile-menu-button" type="button" aria-current={appSection === 'profile' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'profile' ? 'scoreboard' : 'profile')}>Min statistikk</button>}
-          {session && <button className="club-menu-button profile-menu-button" type="button" aria-current={appSection === 'tournament' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'tournament' ? 'scoreboard' : 'tournament')}>Turnering</button>}
-          {session && isClubAdmin && <button className="club-menu-button profile-menu-button" type="button" aria-current={appSection === 'admin' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'admin' ? 'scoreboard' : 'admin')}>Administrasjon</button>}
           {session && <button className="sign-out-button" type="button" onClick={signOut}>Logg ut</button>}
           {guestName && <button className="sign-out-button" type="button" onClick={exitGuest}>Avslutt gjesteøkt</button>}
         </div>
