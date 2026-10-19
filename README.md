@@ -67,6 +67,14 @@ Logg deretter inn i appen på nytt. Administratorer får menyvalget **Administra
 
 Administratorrollen håndheves av Supabase Row Level Security og databasefunksjoner; det er ikke tilstrekkelig å bare vise eller skjule menyknappen. Ikke del Supabase `service_role`-nøkkelen.
 
+### Turnering på klubbkvelden
+
+Turneringsoppsettet ligger under **Administrasjon**, under deltakerlistene, og er bare tilgjengelig for klubbadministratorer. Velg klubbkveld, sett eventuelle seedingsnummer og trekk puljene fra påmeldingene. Puljene fordeles så jevnt som mulig, seedede spillere spres først, og hver pulje har maksimalt åtte spillere. Alle møter alle i puljen. Resultatene registreres som vunne legg, og tabellen rangeres etter seire, leggdifferanse, seeding og navn. Administratorer kan bruke **Skriv ut skjemaer** for å lage A4-ark for hver pulje med spillerliste, tabell og alle kampoppgjør. Når cupen er trukket, blir cuprundene også med på egne utskriftsark; senere runder viser hvem som møter hverandre når de er bestemt, og ledige plasser kan fylles inn for hånd. Eldre turneringer kan åpnes fra **Arkiv for turneringsark** og skrives ut på nytt. Arkivet lagrer turneringsdataene, og nettleserens utskriftsvalg kan brukes til å lagre PDF-kopier.
+
+Cupen trekker de videregående spillerne i et seedet cupoppsett og gir walkover der det trengs. Kampformatet følger klubbens skjema: puljespill best av 3 legg, de første cuprundene best av 5, semifinaler best av 7 og finale best av 9. Med to spillere som går videre blir den ene cupkampen finalen; med fire blir første cuprunde semifinalene.
+
+Turneringer og resultater lagres i Supabase-tabellen `club_tournaments`. Kjør `supabase/schema.sql` for å opprette tabellen og administratorpolicyene før funksjonen brukes. Innloggede brukere kan se oppsettet; bare klubbadministratorer kan trekke puljer, registrere resultater og velge hvem som går videre.
+
 ## Regler
 
 501 starter på 501 poeng, mens 121-utgang starter på 121. Begge bruker dobbel ut: siste pil må treffe en dobbel. Bust skjer hvis du går under 0, står igjen med 1 eller treffer 0 uten dobbel; poengsummen fra før turen beholdes.

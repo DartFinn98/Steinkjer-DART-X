@@ -37,6 +37,37 @@ export type ClubAdmin = {
   grantedAt: string
 }
 
+export type TournamentParticipant = {
+  signupId: string
+  playerName: string
+  seed: number | null
+  poolNumber: number | null
+  advances: boolean
+}
+
+export type TournamentMatch = {
+  id: string
+  phase: 'pool' | 'cup'
+  roundNumber: number
+  bracketPosition: number
+  poolNumber: number | null
+  playerOneSignupId: string
+  playerTwoSignupId: string | null
+  playerOneLegs: number | null
+  playerTwoLegs: number | null
+  winnerSignupId: string | null
+  bestOfLegs: 3 | 5 | 7 | 9
+}
+
+export type ClubTournament = {
+  eventDate: string
+  participants: TournamentParticipant[]
+  matches: TournamentMatch[]
+  cupRound: number
+  createdAt: string
+  updatedAt: string
+}
+
 export type LinkedPlayerProfile = {
   userId: string
   playerId: string
@@ -377,6 +408,36 @@ export async function setClubAdminRole(email: string, isAdmin: boolean): Promise
     target_email: normalizedEmail,
     make_admin: isAdmin,
   })
+  if (error) throw error
+}
+
+export async function loadClubTournaments(): Promise<ClubTournament[]> {
+  if (!supabase) throw new Error('Supabase er ikke konfigurert.')
+  const { data, error } = await supabase
+    .from('club_tournaments')
+    .select('event_date, participants, matches, cup_round, created_at, updated_at')
+    .order('event_date', { ascending: true })
+  if (error) throw error
+  return (data ?? []).map((tournament) => ({
+    eventDate: tournament.event_date,
+    participants: tournament.participants as TournamentParticipant[],
+    matches: tournament.matches as TournamentMatch[],
+    cupRound: tournament.cup_round,
+    createdAt: tournament.created_at,
+    updatedAt: tournament.updated_at,
+  }))
+}
+
+export async function saveClubTournament(tournament: ClubTournament): Promise<void> {
+  if (!supabase) throw new Error('Supabase er ikke konfigurert.')
+  if (!navigator.onLine) throw new Error('Du må være på nett for å lagre turneringen.')
+  const { error } = await supabase.from('club_tournaments').upsert({
+    event_date: tournament.eventDate,
+    participants: tournament.participants,
+    matches: tournament.matches,
+    cup_round: tournament.cupRound,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'event_date' })
   if (error) throw error
 }
 

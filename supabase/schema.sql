@@ -25,6 +25,15 @@ create table if not exists public.club_signups (
   unique (event_date, signed_up_by)
 );
 
+create table if not exists public.club_tournaments (
+  event_date date primary key,
+  participants jsonb not null default '[]'::jsonb check (jsonb_typeof(participants) = 'array'),
+  matches jsonb not null default '[]'::jsonb check (jsonb_typeof(matches) = 'array'),
+  cup_round smallint not null default 0 check (cup_round >= 0),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.club_admins (
   user_id uuid primary key references auth.users(id) on delete cascade,
   granted_at timestamptz not null default now()
@@ -55,6 +64,7 @@ alter table public.matches add constraint matches_best_of_legs_check check (best
 alter table public.players enable row level security;
 alter table public.matches enable row level security;
 alter table public.club_signups enable row level security;
+alter table public.club_tournaments enable row level security;
 alter table public.club_admins enable row level security;
 alter table public.member_player_profiles enable row level security;
 
@@ -183,6 +193,23 @@ create policy "Club admins can manage all club signups"
   with check ((select public.is_club_admin()));
 
 grant select, insert, update, delete on public.club_signups to authenticated;
+
+drop policy if exists "Signed-in members can view club tournaments" on public.club_tournaments;
+create policy "Signed-in members can view club tournaments"
+  on public.club_tournaments
+  for select
+  to authenticated
+  using ((select auth.uid()) is not null);
+
+drop policy if exists "Club admins can manage tournaments" on public.club_tournaments;
+create policy "Club admins can manage tournaments"
+  on public.club_tournaments
+  for all
+  to authenticated
+  using ((select public.is_club_admin()))
+  with check ((select public.is_club_admin()));
+
+grant select, insert, update, delete on public.club_tournaments to authenticated;
 
 drop policy if exists "Members can manage their own player profile link" on public.member_player_profiles;
 create policy "Members can manage their own player profile link"
