@@ -673,10 +673,16 @@ export async function syncPendingChanges(): Promise<{ synced: number; pending: n
           name: player.name,
           last_played_at: player.lastPlayedAt,
         })), { onConflict: 'id' })
-        if (error) continue
+        if (error) {
+          console.error('Could not sync pending player changes:', error)
+          continue
+        }
       } else if (change.kind === 'delete-player') {
         const { error } = await supabase.from('players').delete().eq('id', change.playerId)
-        if (error) continue
+        if (error) {
+          console.error('Could not sync pending player deletion:', error)
+          continue
+        }
       } else if (change.kind === 'save-match') {
         const playerRecords = change.match.players.map((player) => ({
           id: player.name.trim().toLowerCase(),
@@ -684,7 +690,10 @@ export async function syncPendingChanges(): Promise<{ synced: number; pending: n
           last_played_at: change.match.playedAt,
         }))
         const { error: playersError } = await supabase.from('players').upsert(playerRecords, { onConflict: 'id' })
-        if (playersError) continue
+        if (playersError) {
+          console.error('Could not sync players for a pending match:', playersError)
+          continue
+        }
         const { error: matchError } = await supabase.from('matches').upsert({
           id: change.match.id,
           played_at: change.match.playedAt,
@@ -696,21 +705,35 @@ export async function syncPendingChanges(): Promise<{ synced: number; pending: n
           leg_starter_name: change.match.legStarterName ?? null,
           players: change.match.players,
         }, { onConflict: 'id' })
-        if (matchError) continue
+        if (matchError) {
+          console.error('Could not sync a pending match:', matchError)
+          continue
+        }
       } else if (change.kind === 'delete-match') {
         const { error } = await supabase.from('matches').delete().eq('id', change.matchId)
-        if (error) continue
+        if (error) {
+          console.error('Could not sync pending match deletion:', error)
+          continue
+        }
       } else {
         const { error } = await supabase.functions.invoke('send-match-report', { body: change.match })
-        if (error) continue
+        if (error) {
+          console.error('Could not send a pending match report:', error)
+          continue
+        }
       }
 
       await removePendingChange(change.id)
-      synced += 1
-    } catch {
+      if (change.kind !== 'send-email') synced += 1
+    } catch (error) {
+      console.error(`Could not sync pending ${change.kind} change:`, error)
       continue
     }
   }
 
-  return { synced, pending: pending.length - synced }
+  const remaining = await loadPendingChanges()
+  return {
+    synced,
+    pending: remaining.filter((change) => change.kind !== 'send-email').length,
+  }
 }
