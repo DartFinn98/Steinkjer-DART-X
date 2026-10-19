@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { getCheckoutHint } from './checkout'
-import { deleteClubSignup, deleteSavedMatch, deleteSavedPlayer, loadClubSignups, loadLinkedPlayerProfile, loadSavedData, saveClubSignup, saveFinishedMatch, saveLinkedPlayerId, savePlayers, sendMatchReport, syncPendingChanges, uploadProfileAvatar } from './database'
-import type { ClubSignup, SavedData } from './database'
+import { deleteClubSignup, deleteSavedMatch, deleteSavedPlayer, loadClubAdminStatus, loadClubAdmins, loadClubSignups, loadLinkedPlayerProfile, loadSavedData, saveClubSignup, saveFinishedMatch, saveLinkedPlayerId, savePlayers, sendMatchReport, setClubAdminRole, syncPendingChanges, updateClubSignup, uploadProfileAvatar } from './database'
+import type { ClubAdmin, ClubSignup, SavedData } from './database'
 import { supabase } from './supabase'
 import type { Session } from '@supabase/supabase-js'
 import { summarizePlayer } from './stats'
@@ -17,7 +17,7 @@ type Player = { id: string; name: string; score: number; visits: Visit[]; teamId
 type Snapshot = { players: Player[]; activePlayer: number; winnerId: string | null; legsWon: Record<string, number>; matchWinnerId: string | null }
 type EntryMode = 'darts' | 'total'
 type GamePhase = 'setup' | 'bull-off' | 'leg-bull-off' | 'playing'
-type AppSection = 'scoreboard' | 'club-evenings' | 'profile'
+type AppSection = 'scoreboard' | 'club-evenings' | 'profile' | 'admin'
 type CoinSide = 'kron' | 'mynt'
 type CourtNumber = 1 | 2 | 3 | 4 | 5
 
@@ -166,6 +166,24 @@ function formatClubDate(date: string): string {
   return `${formattedDate.charAt(0).toLocaleUpperCase('nb-NO')}${formattedDate.slice(1)}`
 }
 
+function downloadClubSignupCsv(signups: ClubSignup[], eventDate: string) {
+  const csvCell = (value: string) => {
+    const safeValue = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value
+    return `"${safeValue.replace(/"/g, '""')}"`
+  }
+  const rows = [
+    ['Dato', 'Navn'],
+    ...signups.map((signup) => [formatClubDate(signup.eventDate), signup.playerName]),
+  ]
+  const csv = `\uFEFF${rows.map((row) => row.map(csvCell).join(';')).join('\r\n')}`
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `steinkjer-dartx-pameldinger-${eventDate || 'alle'}.csv`
+  link.click()
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
 function summarizeCareer(matches: SavedData['matches'], playerId: string) {
   const playerNameKey = playerId.trim().toLowerCase()
   const appearances = matches.flatMap((match) => {
@@ -259,6 +277,17 @@ function App() {
   const [clubSignupName, setClubSignupName] = useState('')
   const [clubSignupMessage, setClubSignupMessage] = useState('')
   const [clubSignupBusy, setClubSignupBusy] = useState(false)
+  const [isClubAdmin, setIsClubAdmin] = useState(false)
+  const [adminMessage, setAdminMessage] = useState('')
+  const [adminSignupsBusy, setAdminSignupsBusy] = useState(false)
+  const [adminEditingSignupId, setAdminEditingSignupId] = useState<string | null>(null)
+  const [adminPendingDeleteId, setAdminPendingDeleteId] = useState<string | null>(null)
+  const [adminEditDate, setAdminEditDate] = useState('')
+  const [adminEditName, setAdminEditName] = useState('')
+  const [adminExportDate, setAdminExportDate] = useState('all')
+  const [clubAdmins, setClubAdmins] = useState<ClubAdmin[]>([])
+  const [adminEmail, setAdminEmail] = useState('')
+  const [adminRoleBusy, setAdminRoleBusy] = useState(false)
   const [linkedPlayerId, setLinkedPlayerId] = useState<string | null>(null)
   const [profilePlayerId, setProfilePlayerId] = useState('')
   const [profileLoading, setProfileLoading] = useState(false)
@@ -268,6 +297,17 @@ function App() {
   const [profileAvatarBusy, setProfileAvatarBusy] = useState(false)
 
   const upcomingClubDates = getUpcomingClubDates()
+  const todayDate = new Date()
+  todayDate.setHours(0, 0, 0, 0)
+  const todayDateKey = `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, '0')}-${String(todayDate.getDate()).padStart(2, '0')}`
+  const adminUpcomingSignups = clubSignups.filter((signup) => signup.eventDate >= todayDateKey)
+  const adminEventDates = Array.from(new Set([
+    ...upcomingClubDates,
+    ...adminUpcomingSignups.map((signup) => signup.eventDate),
+  ])).sort()
+  const adminExportSignups = adminExportDate === 'all'
+    ? adminUpcomingSignups
+    : adminUpcomingSignups.filter((signup) => signup.eventDate === adminExportDate)
   const profilePlayers = Array.from(new Map([
     ...savedData.players,
     ...savedData.matches.flatMap((match) => match.players.map((player) => ({
@@ -315,6 +355,22 @@ function App() {
   }, [])
 
   useEffect(() => {
+    let mounted = true
+    setIsClubAdmin(false)
+    if (!session) {
+      setClubAdmins([])
+      return () => { mounted = false }
+    }
+
+    void loadClubAdminStatus().then((isAdmin) => {
+      if (mounted) setIsClubAdmin(isAdmin)
+    }).catch(() => {
+      if (mounted) setDatabaseMessage('Kunne ikke kontrollere administratorrollen. Last siden på nytt, eller kontakt en administrator.')
+    })
+    return () => { mounted = false }
+  }, [session])
+
+  useEffect(() => {
     if (supabase && !session) {
       setSavedData({ players: [], matches: [] })
       setPlayerNames([])
@@ -355,7 +411,7 @@ function App() {
   }, [appSection, session])
 
   useEffect(() => {
-    if (appSection !== 'club-evenings' || (supabase && !session)) return
+    if ((appSection !== 'club-evenings' && appSection !== 'admin') || (supabase && !session)) return
     let mounted = true
     void loadClubSignups().then((signups) => {
       if (mounted) {
@@ -363,10 +419,25 @@ function App() {
         setClubSignupMessage('')
       }
     }).catch(() => {
-      if (mounted) setClubSignupMessage('Kunne ikke hente påmeldingene. Kontroller at påmeldingstabellen er satt opp i Supabase, og prøv igjen.')
+      if (mounted) {
+        if (appSection === 'admin') setAdminMessage('Kunne ikke hente påmeldingene. Kontroller at påmeldingstabellen og administratorpolicyene er satt opp i Supabase.')
+        else setClubSignupMessage('Kunne ikke hente påmeldingene. Kontroller at påmeldingstabellen er satt opp i Supabase, og prøv igjen.')
+      }
     })
     return () => { mounted = false }
   }, [appSection, session, isOnline])
+
+  useEffect(() => {
+    if (appSection !== 'admin' || !isClubAdmin) return
+    let mounted = true
+    setAdminMessage('')
+    void loadClubAdmins().then((admins) => {
+      if (mounted) setClubAdmins(admins)
+    }).catch(() => {
+      if (mounted) setAdminMessage('Kunne ikke hente administratorlisten. Kontroller at Supabase-oppsettet er oppdatert.')
+    })
+    return () => { mounted = false }
+  }, [appSection, isClubAdmin])
 
   useEffect(() => {
     const handleOffline = () => {
@@ -972,6 +1043,51 @@ function App() {
     setMessage('')
   }
 
+  async function saveAdminSignup(signupId: string) {
+    setAdminSignupsBusy(true)
+    setAdminMessage('')
+    try {
+      await updateClubSignup(signupId, adminEditDate, adminEditName)
+      setClubSignups(await loadClubSignups())
+      setAdminEditingSignupId(null)
+      setAdminMessage('Påmeldingen er oppdatert.')
+    } catch (error) {
+      setAdminMessage(error instanceof Error ? error.message : 'Påmeldingen kunne ikke oppdateres.')
+    } finally {
+      setAdminSignupsBusy(false)
+    }
+  }
+
+  async function removeAdminSignup(signupId: string) {
+    setAdminSignupsBusy(true)
+    setAdminMessage('')
+    try {
+      await deleteClubSignup(signupId)
+      setClubSignups(await loadClubSignups())
+      setAdminPendingDeleteId(null)
+      setAdminMessage('Påmeldingen er slettet.')
+    } catch (error) {
+      setAdminMessage(error instanceof Error ? error.message : 'Påmeldingen kunne ikke slettes.')
+    } finally {
+      setAdminSignupsBusy(false)
+    }
+  }
+
+  async function changeClubAdminRole(email: string, makeAdmin: boolean) {
+    setAdminRoleBusy(true)
+    setAdminMessage('')
+    try {
+      await setClubAdminRole(email, makeAdmin)
+      setClubAdmins(await loadClubAdmins())
+      setAdminEmail('')
+      setAdminMessage(makeAdmin ? 'Administratorrollen er gitt.' : 'Administratorrollen er fjernet.')
+    } catch (error) {
+      setAdminMessage(error instanceof Error ? error.message : 'Administratorrollen kunne ikke endres.')
+    } finally {
+      setAdminRoleBusy(false)
+    }
+  }
+
   function applyCheckoutSuggestion() {
     if (!currentPlayer || !checkoutHint) return
     if (entryMode === 'total') {
@@ -1027,12 +1143,58 @@ function App() {
           <div className="topbar-meta">{isOnline ? <span className="live-dot" /> : <span className="offline-dot" />} {isOnline ? gameMode === 'cricket' ? 'CRICKET' : `${gameMode} / DOBBEL UT` : 'OFFLINE'} <span className="court-indicator">BANE {courtNumber}</span>{!supabase && <span className="local-mode-tag">LOKAL MODUS</span>}</div>
           <button className="club-menu-button" type="button" aria-current={appSection === 'club-evenings' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'club-evenings' ? 'scoreboard' : 'club-evenings')}>{appSection === 'club-evenings' ? 'Poengtavle' : 'Påmelding'}</button>
           {session && <button className="club-menu-button profile-menu-button" type="button" aria-current={appSection === 'profile' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'profile' ? 'scoreboard' : 'profile')}>Min statistikk</button>}
+          {session && isClubAdmin && <button className="club-menu-button profile-menu-button" type="button" aria-current={appSection === 'admin' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'admin' ? 'scoreboard' : 'admin')}>Administrasjon</button>}
           {session && <button className="sign-out-button" type="button" onClick={signOut}>Logg ut</button>}
         </div>
       </header>
       {databaseMessage && <div className="database-message" role="status"><span>{databaseMessage}</span><button type="button" aria-label="Skjul varsel" onClick={() => setDatabaseMessage('')}>Lukk</button></div>}
 
-      {appSection === 'profile' && session ? (
+      {appSection === 'admin' && session && isClubAdmin ? (
+        <section className="admin-page">
+          <div className="club-evenings-heading">
+            <p className="eyebrow">STEINKJER DART-X / ADMINISTRASJON</p>
+            <h1>Påmeldinger<span className="title-period">.</span></h1>
+            <p className="intro">Samlet oversikt over klubbkveldene. Rett navn eller dato, fjern feilpåmeldinger og last ned deltakerlisten.</p>
+          </div>
+          <section className="admin-panel">
+            <div className="admin-section-heading">
+              <div><p className="eyebrow">KOMMENDE KLUBBKVELDER</p><h2>Deltakerlister</h2></div>
+              <label className="admin-export-select"><span>LAST NED</span><select value={adminExportDate} onChange={(event) => setAdminExportDate(event.target.value)}><option value="all">Alle kommende kvelder</option>{adminEventDates.map((date) => <option key={date} value={date}>{formatClubDate(date)}</option>)}</select></label>
+              <button className="primary-button admin-export-button" type="button" disabled={adminExportSignups.length === 0} onClick={() => downloadClubSignupCsv(adminExportSignups, adminExportDate === 'all' ? 'alle' : adminExportDate)}>Last ned CSV</button>
+            </div>
+            {adminMessage && <p className="admin-message" role="status">{adminMessage}</p>}
+            {adminUpcomingSignups.length === 0 ? <p className="admin-empty">Ingen kommende påmeldinger ennå.</p> : adminEventDates.filter((date) => adminUpcomingSignups.some((signup) => signup.eventDate === date)).map((date) => {
+              const attendees = adminUpcomingSignups.filter((signup) => signup.eventDate === date)
+              return <section className="admin-event" key={date}>
+                <h3>{formatClubDate(date)} <span>{attendees.length} {attendees.length === 1 ? 'påmeldt' : 'påmeldte'}</span></h3>
+                <ul className="admin-signup-list">{attendees.map((signup) => {
+                  const isEditing = adminEditingSignupId === signup.id
+                  const isConfirmingDelete = adminPendingDeleteId === signup.id
+                  return <li key={signup.id}>
+                    {isEditing ? <form className="admin-signup-edit" onSubmit={(event) => { event.preventDefault(); void saveAdminSignup(signup.id) }}>
+                      <label><span>DATO</span><select required value={adminEditDate} onChange={(event) => setAdminEditDate(event.target.value)}>{adminEventDates.map((eventDate) => <option key={eventDate} value={eventDate}>{formatClubDate(eventDate)}</option>)}</select></label>
+                      <label><span>NAVN</span><input autoFocus required maxLength={24} value={adminEditName} onChange={(event) => setAdminEditName(event.target.value)} /></label>
+                      <div className="admin-signup-actions"><button className="primary-button" type="submit" disabled={adminSignupsBusy}>{adminSignupsBusy ? 'LAGRER …' : 'Lagre'}</button><button type="button" disabled={adminSignupsBusy} onClick={() => setAdminEditingSignupId(null)}>Avbryt</button></div>
+                    </form> : <>
+                      <span className="admin-signup-name">{signup.playerName}</span>
+                      {isConfirmingDelete ? <div className="admin-signup-actions"><span>Fjerne påmeldingen?</span><button className="admin-delete-confirm" type="button" disabled={adminSignupsBusy} onClick={() => void removeAdminSignup(signup.id)}>Ja, slett</button><button type="button" disabled={adminSignupsBusy} onClick={() => setAdminPendingDeleteId(null)}>Avbryt</button></div> : <div className="admin-signup-actions"><button type="button" disabled={adminSignupsBusy} onClick={() => { setAdminEditingSignupId(signup.id); setAdminPendingDeleteId(null); setAdminEditDate(signup.eventDate); setAdminEditName(signup.playerName) }}>Rediger</button><button className="admin-delete-button" type="button" disabled={adminSignupsBusy} onClick={() => { setAdminPendingDeleteId(signup.id); setAdminEditingSignupId(null) }}>Slett</button></div>}
+                    </>}
+                  </li>
+                })}</ul>
+              </section>
+            })}
+          </section>
+          <section className="admin-panel admin-roles-panel">
+            <div><p className="eyebrow">TILGANG</p><h2>Administratorer</h2><p>Legg til eller fjern administratorer. Personen må allerede ha opprettet konto med denne e-postadressen.</p></div>
+            <form className="admin-role-form" onSubmit={(event) => { event.preventDefault(); void changeClubAdminRole(adminEmail, true) }}>
+              <label><span>E-POSTADRESSE</span><input type="email" autoComplete="email" required maxLength={320} value={adminEmail} onChange={(event) => setAdminEmail(event.target.value)} placeholder="navn@eksempel.no" /></label>
+              <button className="primary-button" type="submit" disabled={adminRoleBusy || !adminEmail.trim()}>{adminRoleBusy ? 'LAGRER …' : 'Gi administratorrolle'}</button>
+            </form>
+            <ul className="admin-list">{clubAdmins.map((admin) => <li key={admin.email}><span>{admin.email}</span><button className="admin-delete-button" type="button" disabled={adminRoleBusy || admin.email.toLocaleLowerCase() === session.user.email?.toLocaleLowerCase()} onClick={() => void changeClubAdminRole(admin.email, false)}>{admin.email.toLocaleLowerCase() === session.user.email?.toLocaleLowerCase() ? 'Du' : 'Fjern rolle'}</button></li>)}</ul>
+            <p className="admin-role-note">Din egen administratorrolle kan ikke fjernes her. Sørg for å beholde minst én aktiv administrator.</p>
+          </section>
+        </section>
+      ) : appSection === 'profile' && session ? (
         <section className="player-profile-page">
           <div className="club-evenings-heading">
             <p className="eyebrow">STEINKJER DART-X / SPILLERPROFIL</p>

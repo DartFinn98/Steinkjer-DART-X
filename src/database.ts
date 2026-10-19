@@ -32,6 +32,11 @@ export type ClubSignup = {
   signedUpAt: string
 }
 
+export type ClubAdmin = {
+  email: string
+  grantedAt: string
+}
+
 export type LinkedPlayerProfile = {
   userId: string
   playerId: string
@@ -318,6 +323,61 @@ export async function deleteClubSignup(signupId: string): Promise<void> {
 
   const signups = await loadLocalClubSignups()
   await cacheClubSignups(signups.filter((signup) => signup.id !== signupId))
+}
+
+export async function updateClubSignup(signupId: string, eventDate: string, playerName: string): Promise<void> {
+  if (!supabase) throw new Error('Supabase er ikke konfigurert.')
+  if (!navigator.onLine) throw new Error('Du må være på nett for å endre en påmelding.')
+  const normalizedName = playerName.trim().replace(/\s+/g, ' ')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate) || normalizedName.length < 1 || normalizedName.length > 24) {
+    throw new Error('Velg en klubbkveld og skriv inn et navn på 1–24 tegn.')
+  }
+
+  const { data, error } = await supabase.from('club_signups').update({
+    event_date: eventDate,
+    player_name: normalizedName,
+  }).eq('id', signupId).select('id, event_date, player_name, signed_up_by, signed_up_at').maybeSingle()
+  if (error) throw error
+  if (!data) throw new Error('Påmeldingen kunne ikke endres. Oppdater listen og prøv igjen.')
+
+  const signup: ClubSignup = {
+    id: data.id,
+    eventDate: data.event_date,
+    playerName: data.player_name,
+    signedUpBy: data.signed_up_by,
+    signedUpAt: data.signed_up_at,
+  }
+  const signups = await loadLocalClubSignups()
+  await cacheClubSignups([...signups.filter((item) => item.id !== signup.id), signup])
+}
+
+export async function loadClubAdminStatus(): Promise<boolean> {
+  if (!supabase) return false
+  const { data, error } = await supabase.rpc('is_club_admin')
+  if (error) throw error
+  return data === true
+}
+
+export async function loadClubAdmins(): Promise<ClubAdmin[]> {
+  if (!supabase) throw new Error('Supabase er ikke konfigurert.')
+  const { data, error } = await supabase.rpc('get_club_admins')
+  if (error) throw error
+  return (data ?? []).map((admin: { email: string; granted_at: string }) => ({
+    email: admin.email,
+    grantedAt: admin.granted_at,
+  }))
+}
+
+export async function setClubAdminRole(email: string, isAdmin: boolean): Promise<void> {
+  if (!supabase) throw new Error('Supabase er ikke konfigurert.')
+  if (!navigator.onLine) throw new Error('Du må være på nett for å endre administratorroller.')
+  const normalizedEmail = email.trim().toLowerCase()
+  if (!normalizedEmail || normalizedEmail.length > 320) throw new Error('Skriv inn en gyldig e-postadresse.')
+  const { error } = await supabase.rpc('set_club_admin', {
+    target_email: normalizedEmail,
+    make_admin: isAdmin,
+  })
+  if (error) throw error
 }
 
 export async function loadLinkedPlayerProfile(userId: string): Promise<{ playerId: string | null; avatarUrl: string | null }> {
