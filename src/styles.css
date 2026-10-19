@@ -123,18 +123,14 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .tournament-match-info span:last-of-type { text-align: right; }
 .tournament-match-info b { color: var(--orange); }
 .tournament-match-info small { grid-column: 1 / -1; color: var(--muted); font: 8px var(--mono); }
-.tournament-score-form { flex: none; display: flex; align-items: center; gap: 5px; }
-.tournament-score-form label { display: block; }
-.tournament-score-form input { width: 47px; height: 36px; padding: 0 4px; border: 1px solid var(--line); border-radius: 0; background: var(--paper); text-align: center; }
-.tournament-score-form button { min-height: 36px; padding: 0 9px; border: 1px solid var(--green); background: var(--green); color: #fff; font-size: 10px; font-weight: 700; cursor: pointer; }
-.tournament-score-form button:disabled { cursor: wait; opacity: .6; }
+.tournament-play-button { flex: none; min-height: 36px; padding: 0 12px; border: 1px solid var(--green); background: var(--green); color: #fff; font-size: 10px; font-weight: 700; cursor: pointer; }
+.tournament-play-button:disabled { cursor: wait; opacity: .6; }
 .tournament-match-result { max-width: 45%; color: var(--green); font-size: 11px; text-align: right; overflow-wrap: anywhere; }
 .tournament-match-pending { color: var(--muted); font-size: 10px; }
 .tournament-cup-round { margin-top: 16px; }
 .tournament-cup-round h4 { margin: 0; color: var(--green); font: 10px var(--mono); letter-spacing: .5px; text-transform: uppercase; }
 .tournament-actions { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding-top: 12px; border-top: 1px solid var(--line); }
 .tournament-actions .admin-empty { margin: 0; line-height: 1.5; }
-.tournament-next-round { margin-top: 15px; }
 .tournament-champion { margin: 16px 0 0; padding: 13px; background: #175c4510; color: var(--green); font-family: var(--serif); font-size: 20px; text-align: center; }
 .tournament-archive { padding-top: 17px; border-top: 1px solid var(--line); }
 .tournament-archive h3 { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 0; font-size: 14px; }
@@ -555,7 +551,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
   .tournament-seed-list { grid-template-columns: minmax(0, 1fr); }
   .tournament-match { align-items: stretch; flex-direction: column; }
   .tournament-match-result { max-width: none; text-align: left; }
-  .tournament-score-form { justify-content: flex-end; }
+  .tournament-play-button { width: 100%; }
   .tournament-actions { align-items: stretch; flex-direction: column; }
   .tournament-actions .primary-button { width: 100%; }
   .brand-logo { width: 34px; }

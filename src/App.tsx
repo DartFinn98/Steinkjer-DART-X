@@ -12,6 +12,12 @@ import { createNextCupRound, drawClubPools, getPoolStandings, setTournamentAdvan
 
 type DartInputs = [string, string, string]
 type ScoredDart = { points: number; isDouble: boolean; target: number | null; marks: number }
+type ActiveTournamentMatch = {
+  eventDate: string
+  matchId: string
+  playerOneId: string
+  playerTwoId: string
+}
 type GameMode = '501' | 'cricket' | '121'
 type Visit = { darts: [number, number, number] | null; total: number; bust: boolean; checkout: boolean; dartsThrown: number; legNumber: number; cricketDarts?: CricketDart[] }
 type Player = { id: string; name: string; score: number; visits: Visit[]; teamId?: 'A' | 'B'; cricketMarks?: CricketMarks; scoreCorrected?: boolean }
@@ -59,18 +65,16 @@ type TournamentBoardProps = {
   archivedTournaments: ClubTournament[]
   signups: ClubSignup[]
   seedRanks: Record<string, string>
-  scores: Record<string, { playerOne: string; playerTwo: string }>
   busy: boolean
+  canPlayMatch: boolean
   isAdmin: boolean
   message: string
   onEventDateChange: (date: string) => void
   onSeedChange: (signupId: string, rank: string) => void
   onDraw: () => void
-  onScoreChange: (matchId: string, player: 'playerOne' | 'playerTwo', score: string) => void
-  onSaveScore: (match: TournamentMatch) => void
+  onPlayMatch: (match: TournamentMatch) => void
   onToggleAdvancement: (signupId: string, advances: boolean) => void
   onCreateCup: () => void
-  onNextCupRound: () => void
 }
 
 function TournamentBoard({
@@ -80,18 +84,16 @@ function TournamentBoard({
   archivedTournaments,
   signups,
   seedRanks,
-  scores,
   busy,
+  canPlayMatch,
   isAdmin,
   message,
   onEventDateChange,
   onSeedChange,
   onDraw,
-  onScoreChange,
-  onSaveScore,
+  onPlayMatch,
   onToggleAdvancement,
   onCreateCup,
-  onNextCupRound,
 }: TournamentBoardProps) {
   const seedOptions = Array.from({ length: signups.length }, (_, index) => String(index + 1))
   const tournamentPools = tournament
@@ -103,9 +105,6 @@ function TournamentBoard({
   const cupRoundMatches = tournament && cupMatches.length > 0
     ? cupMatches.filter((match) => match.roundNumber === tournament.cupRound)
     : []
-  const canStartNextCupRound = tournament?.cupRound
-    && cupRoundMatches.length > 1
-    && cupRoundMatches.every((match) => match.winnerSignupId !== null)
   const tournamentFinished = tournament?.cupRound
     && cupRoundMatches.length === 1
     && cupRoundMatches[0].winnerSignupId !== null
@@ -147,7 +146,7 @@ function TournamentBoard({
             <td>{index + 1}</td><th scope="row">{participant.playerName}{participant.seed !== null && <small>Seed {participant.seed}</small>}</th><td>{participant.wins}</td><td>{participant.legDifference > 0 ? `+${participant.legDifference}` : participant.legDifference}</td>
             {isAdmin && tournament.cupRound === 0 && <td><input type="checkbox" aria-label={`${participant.playerName} går videre`} checked={participant.advances} disabled={!poolIsComplete || busy} onChange={(event) => onToggleAdvancement(participant.signupId, event.target.checked)} /></td>}
           </tr>)}</tbody></table></div>
-          <ul className="tournament-match-list">{poolMatches.filter((match) => match.poolNumber === poolNumber).map((match) => <TournamentMatchRow key={match.id} match={match} tournament={tournament} score={scores[match.id]} isAdmin={isAdmin} busy={busy} onScoreChange={onScoreChange} onSaveScore={onSaveScore} />)}</ul>
+          <ul className="tournament-match-list">{poolMatches.filter((match) => match.poolNumber === poolNumber).map((match) => <TournamentMatchRow key={match.id} match={match} tournament={tournament} isAdmin={isAdmin} busy={busy} canPlayMatch={canPlayMatch} onPlayMatch={onPlayMatch} />)}</ul>
         </section>
       })}
       {isAdmin && tournament.cupRound === 0 && poolsComplete && <div className="tournament-actions">
@@ -158,9 +157,8 @@ function TournamentBoard({
         <h3>Cup-oppsett<span>{tournamentFinished ? 'Ferdig' : `Runde ${tournament.cupRound}`}</span></h3>
         {Array.from(new Set(cupMatches.map((match) => match.roundNumber))).sort((first, second) => first - second).map((round) => {
           const roundMatches = cupMatches.filter((match) => match.roundNumber === round).sort((first, second) => first.bracketPosition - second.bracketPosition)
-          return <section className="tournament-cup-round" key={round}><h4>{getRoundLabel(round, roundMatches.length)}</h4><ul className="tournament-match-list">{roundMatches.map((match) => <TournamentMatchRow key={match.id} match={match} tournament={tournament} score={scores[match.id]} isAdmin={isAdmin} busy={busy} onScoreChange={onScoreChange} onSaveScore={onSaveScore} />)}</ul></section>
+          return <section className="tournament-cup-round" key={round}><h4>{getRoundLabel(round, roundMatches.length)}</h4><ul className="tournament-match-list">{roundMatches.map((match) => <TournamentMatchRow key={match.id} match={match} tournament={tournament} isAdmin={isAdmin} busy={busy} canPlayMatch={canPlayMatch} onPlayMatch={onPlayMatch} />)}</ul></section>
         })}
-        {canStartNextCupRound && isAdmin && <button className="primary-button tournament-next-round" type="button" disabled={busy} onClick={onNextCupRound}>Klargjør neste cuprunde</button>}
         {tournamentFinished && <p className="tournament-champion">Vinner: {participantName(cupRoundMatches[0].winnerSignupId!)}</p>}
       </section>}
       {isAdmin && archivedTournaments.length > 0 && <section className="tournament-archive">
@@ -264,14 +262,13 @@ function TournamentBoard({
 type TournamentMatchRowProps = {
   match: TournamentMatch
   tournament: ClubTournament
-  score?: { playerOne: string; playerTwo: string }
   isAdmin: boolean
   busy: boolean
-  onScoreChange: (matchId: string, player: 'playerOne' | 'playerTwo', score: string) => void
-  onSaveScore: (match: TournamentMatch) => void
+  canPlayMatch: boolean
+  onPlayMatch: (match: TournamentMatch) => void
 }
 
-function TournamentMatchRow({ match, tournament, score, isAdmin, busy, onScoreChange, onSaveScore }: TournamentMatchRowProps) {
+function TournamentMatchRow({ match, tournament, isAdmin, busy, canPlayMatch, onPlayMatch }: TournamentMatchRowProps) {
   const playerOne = tournament.participants.find((participant) => participant.signupId === match.playerOneSignupId)?.playerName ?? 'Ukjent spiller'
   const playerTwo = match.playerTwoSignupId
     ? tournament.participants.find((participant) => participant.signupId === match.playerTwoSignupId)?.playerName ?? 'Ukjent spiller'
@@ -280,12 +277,8 @@ function TournamentMatchRow({ match, tournament, score, isAdmin, busy, onScoreCh
   return <li className="tournament-match">
     <div className="tournament-match-info"><span>{playerOne}</span><b>–</b><span>{playerTwo}</span><small>Best av {match.bestOfLegs}</small></div>
     {completed ? <strong className="tournament-match-result">{match.playerOneLegs !== null && match.playerTwoLegs !== null ? `${match.playerOneLegs}–${match.playerTwoLegs}` : 'Videre på walkover'} · {tournament.participants.find((participant) => participant.signupId === match.winnerSignupId)?.playerName}</strong>
-      : isAdmin && match.playerTwoSignupId ? <form className="tournament-score-form" onSubmit={(event) => { event.preventDefault(); onSaveScore(match) }}>
-        <label><span className="visually-hidden">{playerOne} legg</span><input aria-label={`${playerOne} legg`} type="number" min="0" max={Math.floor(match.bestOfLegs / 2) + 1} inputMode="numeric" required value={score?.playerOne ?? ''} onChange={(event) => onScoreChange(match.id, 'playerOne', event.target.value)} /></label>
-        <span aria-hidden="true">–</span>
-        <label><span className="visually-hidden">{playerTwo} legg</span><input aria-label={`${playerTwo} legg`} type="number" min="0" max={Math.floor(match.bestOfLegs / 2) + 1} inputMode="numeric" required value={score?.playerTwo ?? ''} onChange={(event) => onScoreChange(match.id, 'playerTwo', event.target.value)} /></label>
-        <button type="submit" disabled={busy}>Lagre</button>
-      </form> : <span className="tournament-match-pending">Venter på resultat</span>}
+      : isAdmin && match.playerTwoSignupId ? <button className="tournament-play-button" type="button" disabled={busy || !canPlayMatch} onClick={() => onPlayMatch(match)}>Spill kamp på poengtavla</button>
+        : <span className="tournament-match-pending">{isAdmin && !canPlayMatch ? 'Avslutt pågående kamp først' : 'Venter på resultat'}</span>}
   </li>
 }
 
@@ -529,9 +522,10 @@ function App() {
   const [clubTournaments, setClubTournaments] = useState<ClubTournament[]>([])
   const [tournamentDate, setTournamentDate] = useState(() => getUpcomingClubDates()[0] ?? '')
   const [tournamentSeedRanks, setTournamentSeedRanks] = useState<Record<string, string>>({})
-  const [tournamentScores, setTournamentScores] = useState<Record<string, { playerOne: string; playerTwo: string }>>({})
   const [tournamentBusy, setTournamentBusy] = useState(false)
   const [tournamentMessage, setTournamentMessage] = useState('')
+  const [activeTournamentMatch, setActiveTournamentMatch] = useState<ActiveTournamentMatch | null>(null)
+  const [tournamentMatchMessage, setTournamentMatchMessage] = useState('')
   const [linkedPlayerId, setLinkedPlayerId] = useState<string | null>(null)
   const [profilePlayerId, setProfilePlayerId] = useState('')
   const [profileLoading, setProfileLoading] = useState(false)
@@ -981,6 +975,7 @@ function App() {
       } else {
         setEmailReportMessage('E-postrapport krever Supabase-innlogging.')
       }
+      if (activeTournamentMatch) void saveFinishedTournamentMatch(activeTournamentMatch, nextLegsWon)
     }
   }
 
@@ -1112,6 +1107,7 @@ function App() {
   }
 
   function newGame() {
+    if (activeTournamentMatch && matchWinnerId) return
     cancelCoinFlip()
     setPlayers([])
     setActivePlayer(0)
@@ -1130,6 +1126,8 @@ function App() {
     setManualLastDartDouble(false)
     setManualBust(false)
     setMessage('')
+    setActiveTournamentMatch(null)
+    setTournamentMatchMessage('')
   }
 
   function startNextLeg() {
@@ -1367,6 +1365,122 @@ function App() {
     }
   }
 
+  async function saveFinishedTournamentMatch(
+    activeMatch: ActiveTournamentMatch,
+    completedLegs: Record<string, number>,
+  ) {
+    if (!isClubAdmin) {
+      setTournamentMatchMessage('Du må være klubbadministrator for å lagre turneringsresultatet.')
+      return
+    }
+    const tournament = clubTournaments.find((item) => item.eventDate === activeMatch.eventDate)
+    if (!tournament) {
+      setTournamentMatchMessage('Turneringen ble ikke funnet. Resultatet er ikke lagret i turneringen.')
+      return
+    }
+    const match = tournament.matches.find((item) => item.id === activeMatch.matchId)
+    if (!match) {
+      setTournamentMatchMessage('Turneringskampen ble ikke funnet. Resultatet er ikke lagret i turneringen.')
+      return
+    }
+    const playerOneLegs = completedLegs[activeMatch.playerOneId]
+    const playerTwoLegs = completedLegs[activeMatch.playerTwoId]
+    if (playerOneLegs === undefined || playerTwoLegs === undefined) {
+      setTournamentMatchMessage('Kampens leggresultat mangler. Turneringsresultatet er ikke lagret.')
+      return
+    }
+    setTournamentBusy(true)
+    setTournamentMessage('')
+    setTournamentMatchMessage('Lagrer turneringsresultatet …')
+    try {
+      let updatedTournament = updateTournamentMatchResult(
+        tournament,
+        activeMatch.matchId,
+        playerOneLegs,
+        playerTwoLegs,
+      )
+      if (match.phase === 'cup') {
+        const currentRoundMatches = updatedTournament.matches.filter((item) =>
+          item.phase === 'cup' && item.roundNumber === match.roundNumber)
+        const nextRoundAlreadyExists = updatedTournament.matches.some((item) =>
+          item.phase === 'cup' && item.roundNumber === match.roundNumber + 1)
+        if (currentRoundMatches.length > 1
+          && currentRoundMatches.every((item) => item.winnerSignupId !== null)
+          && !nextRoundAlreadyExists) {
+          updatedTournament = createNextCupRound(updatedTournament)
+        }
+      }
+      await saveClubTournament(updatedTournament)
+      setClubTournaments((current) => [...current.filter((item) => item.eventDate !== updatedTournament.eventDate), updatedTournament]
+        .sort((first, second) => first.eventDate.localeCompare(second.eventDate)))
+      setActiveTournamentMatch(null)
+      setTournamentMatchMessage('Turneringsresultatet er registrert automatisk.')
+    } catch (error) {
+      const details = error instanceof Error ? error.message : 'Ukjent lagringsfeil.'
+      setTournamentMatchMessage(`Kampen er ferdig, men turneringsresultatet kunne ikke lagres. ${details}`)
+    } finally {
+      setTournamentBusy(false)
+    }
+  }
+
+  function startTournamentMatch(match: TournamentMatch) {
+    if (!isClubAdmin || !selectedTournament || !match.playerTwoSignupId || match.winnerSignupId !== null || activeTournamentMatch) return
+    const participantOne = selectedTournament.participants.find((participant) => participant.signupId === match.playerOneSignupId)
+    const participantTwo = selectedTournament.participants.find((participant) => participant.signupId === match.playerTwoSignupId)
+    if (!participantOne || !participantTwo) {
+      setTournamentMessage('Spillerne i denne turneringskampen ble ikke funnet.')
+      return
+    }
+    const playerOneId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-1`
+    const playerTwoId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-2`
+    const matchPlayers: Player[] = [
+      { id: playerOneId, name: participantOne.playerName, score: 501, visits: [] },
+      { id: playerTwoId, name: participantTwo.playerName, score: 501, visits: [] },
+    ]
+    setActiveTournamentMatch({
+      eventDate: selectedTournament.eventDate,
+      matchId: match.id,
+      playerOneId,
+      playerTwoId,
+    })
+    setTournamentMatchMessage('')
+    setPlayers(matchPlayers)
+    setPlayerNames(matchPlayers.map((player) => player.name))
+    setPlayerCount(2)
+    setTeamMode(false)
+    setGameMode('501')
+    setBestOfLegs(match.bestOfLegs)
+    setUseCoinToss(false)
+    setActivePlayer(0)
+    setLegsWon({ [playerOneId]: 0, [playerTwoId]: 0 })
+    setMatchWinnerId(null)
+    setLegStarterIndex(0)
+    setGamePhase('bull-off')
+    setCoinStarterIndex(0)
+    setCoinResult(null)
+    setBullWinnerId('')
+    setWinnerId(null)
+    setHistory([])
+    setDarts(['', '', ''])
+    setManualTotal('')
+    setManualLastDartDouble(false)
+    setManualBust(false)
+    setMessage('')
+    setDatabaseMessage('')
+    setEmailReportMessage('')
+    setReopenedMatchId(null)
+    setAppSection('scoreboard')
+    void savePlayers(matchPlayers.map((player) => player.name)).then(() => loadSavedData()).then(setSavedData).catch(() => {
+      setDatabaseMessage('Turneringskampen startet, men spillerne kunne ikke lagres i spillerlisten.')
+    })
+  }
+
+  function retryTournamentMatchSave() {
+    if (activeTournamentMatch && matchWinnerId) {
+      void saveFinishedTournamentMatch(activeTournamentMatch, legsWon)
+    }
+  }
+
   async function drawTournamentPools() {
     if (!isClubAdmin || currentTournamentSignups.length < 2) return
     const seedRanks = new Map<string, number>()
@@ -1403,35 +1517,6 @@ function App() {
       await persistTournament(setTournamentAdvancement(selectedTournament, advancingIds), 'Cup-oppsettet er laget.')
     } catch (error) {
       setTournamentMessage(error instanceof Error ? error.message : 'Cup-oppsettet kunne ikke lages.')
-    }
-  }
-
-  async function saveTournamentScore(match: TournamentMatch) {
-    if (!isClubAdmin || !selectedTournament) return
-    const score = tournamentScores[match.id]
-    if (!score || !score.playerOne.trim() || !score.playerTwo.trim()) {
-      setTournamentMessage('Før inn resultatet fra kampen.')
-      return
-    }
-    try {
-      const updatedTournament = updateTournamentMatchResult(
-        selectedTournament,
-        match.id,
-        Number(score.playerOne),
-        Number(score.playerTwo),
-      )
-      await persistTournament(updatedTournament, 'Kampresultatet er lagret.')
-    } catch (error) {
-      setTournamentMessage(error instanceof Error ? error.message : 'Kampresultatet kunne ikke lagres.')
-    }
-  }
-
-  async function createTournamentNextCupRound() {
-    if (!isClubAdmin || !selectedTournament) return
-    try {
-      await persistTournament(createNextCupRound(selectedTournament), 'Neste cuprunde er klar.')
-    } catch (error) {
-      setTournamentMessage(error instanceof Error ? error.message : 'Neste cuprunde kunne ikke trekkes.')
     }
   }
 
@@ -1539,21 +1624,16 @@ function App() {
             archivedTournaments={clubTournaments}
             signups={currentTournamentSignups}
             seedRanks={tournamentSeedRanks}
-            scores={tournamentScores}
             busy={tournamentBusy}
+            canPlayMatch={(players.length === 0 || matchWinnerId !== null) && !activeTournamentMatch}
             isAdmin
             message={tournamentMessage}
             onEventDateChange={(date) => { setTournamentDate(date); setTournamentMessage(''); setTournamentSeedRanks({}) }}
             onSeedChange={(signupId, rank) => setTournamentSeedRanks((current) => ({ ...current, [signupId]: rank }))}
             onDraw={() => void drawTournamentPools()}
-            onScoreChange={(matchId, player, score) => setTournamentScores((current) => ({
-              ...current,
-              [matchId]: { playerOne: current[matchId]?.playerOne ?? '', playerTwo: current[matchId]?.playerTwo ?? '', [player]: score },
-            }))}
-            onSaveScore={(match) => void saveTournamentScore(match)}
+            onPlayMatch={startTournamentMatch}
             onToggleAdvancement={toggleTournamentAdvancement}
             onCreateCup={() => void createTournamentCup()}
-            onNextCupRound={() => void createTournamentNextCupRound()}
           />
           <section className="admin-panel admin-roles-panel">
             <div><p className="eyebrow">TILGANG</p><h2>Administratorer</h2><p>Legg til eller fjern administratorer. Personen må allerede ha opprettet konto med denne e-postadressen.</p></div>
@@ -1579,21 +1659,16 @@ function App() {
             archivedTournaments={clubTournaments}
             signups={currentTournamentSignups}
             seedRanks={tournamentSeedRanks}
-            scores={tournamentScores}
             busy={tournamentBusy}
+            canPlayMatch={(players.length === 0 || matchWinnerId !== null) && !activeTournamentMatch}
             isAdmin={isClubAdmin}
             message={tournamentMessage}
             onEventDateChange={(date) => { setTournamentDate(date); setTournamentMessage(''); setTournamentSeedRanks({}) }}
             onSeedChange={(signupId, rank) => setTournamentSeedRanks((current) => ({ ...current, [signupId]: rank }))}
             onDraw={() => void drawTournamentPools()}
-            onScoreChange={(matchId, player, score) => setTournamentScores((current) => ({
-              ...current,
-              [matchId]: { playerOne: current[matchId]?.playerOne ?? '', playerTwo: current[matchId]?.playerTwo ?? '', [player]: score },
-            }))}
-            onSaveScore={(match) => void saveTournamentScore(match)}
+            onPlayMatch={startTournamentMatch}
             onToggleAdvancement={toggleTournamentAdvancement}
             onCreateCup={() => void createTournamentCup()}
-            onNextCupRound={() => void createTournamentNextCupRound()}
           />
         </section>
       ) : appSection === 'profile' && session ? (
@@ -1822,7 +1897,7 @@ function App() {
             <div><p className="eyebrow">{matchWinnerId ? <>KAMPEN ER AVGJORT <span className="heading-slash">/</span> BEST AV {bestOfLegs}</> : <>KAMPROM / 01 <span className="heading-slash">/</span> {roundWord} {String(legNumber).padStart(2, '0')} <span className="heading-slash">/</span> BEST AV {bestOfLegs}</>}</p><h1>{gameMode === 'cricket' ? 'Cricket' : gameMode}<span className="title-period">.</span></h1></div>
             <div className="game-actions">
               <button className="text-button" type="button" disabled={!history.length || matchWinnerId !== null} onClick={undoVisit}><span aria-hidden="true">↶</span> Angre</button>
-              <button className="text-button new-game-button" type="button" onClick={newGame}>Ny kamp <span aria-hidden="true">↗</span></button>
+              <button className="text-button new-game-button" type="button" disabled={Boolean(activeTournamentMatch && matchWinnerId)} onClick={newGame}>Ny kamp <span aria-hidden="true">↗</span></button>
             </div>
           </div>
           {gameMode === '501' && !winnerId && players.length > 1 && players.some((player) => player.score === 42) && <div className="bull-trigger" role="status"><div><span>42 IGJEN</span><strong>Vil dere avgjøre leggen med et kast på bull?</strong></div><button className="bull-trigger-button" type="button" onClick={beginLegBullOff}>Avgjør på bull</button></div>}
@@ -1853,7 +1928,7 @@ function App() {
             })}
           </div>
           {winner ? (
-            <div className="winner-banner" role="status"><div><p className="eyebrow">{matchWinnerId ? 'KAMPEN ER AVGJORT' : `${roundWord} ${legNumber - 1} ER FERDIG`}</p><h2>{matchWinnerId ? `${winnerDisplayName} vant kampen.` : `${winnerDisplayName} vant ${roundWordLower}en.`}</h2><p className="match-scoreline">{scorePlayers.map((player) => `${teamMode ? `Lag ${player.teamId} (${teamMembers(players, player).map((member) => member.name).join(' + ')})` : player.name} ${legsWon[player.id] ?? 0}`).join('  ·  ')} <span>BEST AV {bestOfLegs}</span></p>{matchWinnerId && emailReportMessage && <p className="email-report-status" role="status">{emailReportMessage}</p>}</div><button className="primary-button" type="button" onClick={matchWinnerId ? newGame : startNextLeg}>{matchWinnerId ? 'Ny kamp' : `Neste ${roundWordLower}`} <span aria-hidden="true">↗</span></button></div>
+            <div className="winner-banner" role="status"><div><p className="eyebrow">{matchWinnerId ? 'KAMPEN ER AVGJORT' : `${roundWord} ${legNumber - 1} ER FERDIG`}</p><h2>{matchWinnerId ? `${winnerDisplayName} vant kampen.` : `${winnerDisplayName} vant ${roundWordLower}en.`}</h2><p className="match-scoreline">{scorePlayers.map((player) => `${teamMode ? `Lag ${player.teamId} (${teamMembers(players, player).map((member) => member.name).join(' + ')})` : player.name} ${legsWon[player.id] ?? 0}`).join('  ·  ')} <span>BEST AV {bestOfLegs}</span></p>{matchWinnerId && emailReportMessage && <p className="email-report-status" role="status">{emailReportMessage}</p>}{matchWinnerId && tournamentMatchMessage && <p className="email-report-status" role={activeTournamentMatch ? 'alert' : 'status'}>{tournamentMatchMessage}</p>}{matchWinnerId && activeTournamentMatch && <button className="text-button" type="button" disabled={tournamentBusy} onClick={retryTournamentMatchSave}>Prøv å lagre turneringsresultatet på nytt</button>}</div><button className="primary-button" type="button" disabled={Boolean(activeTournamentMatch && matchWinnerId)} onClick={matchWinnerId ? newGame : startNextLeg}>{matchWinnerId ? activeTournamentMatch ? 'Lagre resultatet først' : 'Ny kamp' : `Neste ${roundWordLower}`} <span aria-hidden="true">↗</span></button></div>
           ) : (
             <form className="score-entry" onSubmit={recordVisit}>
               <div className="entry-title"><div><p className="eyebrow">{gameMode === 'cricket' ? 'REGISTRER TREFF' : 'REGISTRER POENG'}</p><h2>{currentPlayer?.name}<span> sin tur</span></h2></div><span className="dart-counter">{entryMode === 'total' && gameMode !== 'cricket' ? 'TOTALSUM' : '3 KAST'}</span></div>
