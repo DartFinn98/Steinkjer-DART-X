@@ -1,4 +1,4 @@
-const CACHE_NAME = 'steinkjer-dart-x-v4'
+const CACHE_NAME = 'steinkjer-dart-x-v5'
 const APP_SHELL = ['/', '/manifest.webmanifest', '/dart-mark.svg', '/logo.png']
 
 self.addEventListener('install', (event) => {
