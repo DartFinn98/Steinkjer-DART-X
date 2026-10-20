@@ -115,6 +115,13 @@ export type LinkedPlayerProfile = {
   playerId: string
 }
 
+export type ClubDocument = {
+  path: string
+  name: string
+  createdAt: string | null
+  size: number
+}
+
 const DATABASE_NAME = 'darttavla'
 const DATABASE_VERSION = 3
 const PLAYER_STORE = 'players'
@@ -123,6 +130,8 @@ const PENDING_STORE = 'pending'
 const CLUB_SIGNUP_STORE = 'club-signups'
 const PROFILE_AVATAR_BUCKET = 'profile-avatars'
 const PROFILE_AVATAR_MAX_SIZE = 2 * 1024 * 1024
+const CLUB_DOCUMENT_BUCKET = 'club-documents'
+const CLUB_DOCUMENT_MAX_SIZE = 25 * 1024 * 1024
 const GUEST_SESSION_KEY = 'darttavla-guest-session'
 
 type GuestSession = {
@@ -535,6 +544,67 @@ export async function setClubAdminRole(email: string, isAdmin: boolean): Promise
     make_admin: isAdmin,
   })
   if (error) throw error
+}
+
+export async function loadClubDocuments(): Promise<ClubDocument[]> {
+  if (!supabase) throw new Error('Supabase er ikke konfigurert.')
+  if (!navigator.onLine) throw new Error('Du må være på nett for å hente dokumentene.')
+
+  const { data, error } = await supabase.storage
+    .from(CLUB_DOCUMENT_BUCKET)
+    .list('', { limit: 1000, sortBy: { column: 'created_at', order: 'desc' } })
+  if (error) throw error
+
+  return (data ?? [])
+    .filter((file) => file.id !== null)
+    .map((file) => ({
+      path: file.name,
+      name: file.name.slice(37),
+      createdAt: file.created_at,
+      size: Number(file.metadata?.size ?? 0),
+    }))
+}
+
+export async function uploadClubDocument(file: File): Promise<void> {
+  if (!supabase) throw new Error('Supabase er ikke konfigurert.')
+  if (!navigator.onLine) throw new Error('Du må være på nett for å laste opp dokumenter.')
+  if (file.size === 0) throw new Error('Filen er tom og kan ikke lastes opp.')
+  if (file.size > CLUB_DOCUMENT_MAX_SIZE) throw new Error('Dokumentet kan ikke være større enn 25 MB.')
+
+  const safeName = file.name
+    .replace(/[\\/]/g, '_')
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/[. ]+$/g, '')
+    .slice(0, 180)
+  if (!safeName) throw new Error('Filen mangler et gyldig filnavn.')
+
+  const { error } = await supabase.storage
+    .from(CLUB_DOCUMENT_BUCKET)
+    .upload(`${crypto.randomUUID()}-${safeName}`, file, {
+      cacheControl: '3600',
+      contentType: file.type || 'application/octet-stream',
+      upsert: false,
+    })
+  if (error) throw error
+}
+
+export async function downloadClubDocument(path: string): Promise<Blob> {
+  if (!supabase) throw new Error('Supabase er ikke konfigurert.')
+  if (!navigator.onLine) throw new Error('Du må være på nett for å laste ned dokumenter.')
+
+  const { data, error } = await supabase.storage.from(CLUB_DOCUMENT_BUCKET).download(path)
+  if (error) throw error
+  return data
+}
+
+export async function deleteClubDocument(path: string): Promise<void> {
+  if (!supabase) throw new Error('Supabase er ikke konfigurert.')
+  if (!navigator.onLine) throw new Error('Du må være på nett for å slette dokumenter.')
+
+  const { data, error } = await supabase.storage.from(CLUB_DOCUMENT_BUCKET).remove([path])
+  if (error) throw error
+  if (!data?.length) throw new Error('Dokumentet kunne ikke slettes. Oppdater listen og prøv igjen.')
 }
 
 export async function loadClubTournaments(): Promise<ClubTournament[]> {

@@ -110,6 +110,18 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .admin-role-form .primary-button { min-height: 40px; }
 .admin-list > li { border-top: 0; border-bottom: 1px solid #d9d7ce80; }
 .admin-role-note { margin: -7px 0 0; }
+.admin-documents-panel .admin-section-heading { grid-template-columns: minmax(0, 1fr) auto; }
+.admin-document-upload { position: relative; display: inline-flex; min-height: 40px; align-items: center; justify-content: center; padding: 0 13px; cursor: pointer; }
+.admin-document-upload input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.admin-document-upload:focus-within { outline: 2px solid var(--green); outline-offset: 3px; }
+.admin-document-upload.is-disabled { cursor: not-allowed; opacity: .55; }
+.admin-document-upload.is-disabled input { cursor: not-allowed; }
+.admin-document-note { margin: 13px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.admin-document-list { display: grid; margin: 0; padding: 0; list-style: none; }
+.admin-document-list > li { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 50px; padding: 8px 0; border-bottom: 1px solid #d9d7ce80; font-size: 12px; }
+.admin-document-details { display: grid; min-width: 0; gap: 4px; }
+.admin-document-details > span:last-child { color: var(--muted); font-size: 10px; }
+.admin-document-name { overflow-wrap: anywhere; font-weight: 700; }
 .tournament-panel { display: grid; gap: 18px; }
 .tournament-panel .admin-section-heading { grid-template-columns: minmax(0, 1fr) minmax(210px, 290px) auto; }
 .tournament-heading-actions { display: flex; justify-content: flex-end; gap: 8px; }
@@ -510,6 +522,8 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
   .tournament-heading-actions > * { flex: 1; }
   .admin-signup-edit { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .admin-signup-edit .admin-signup-actions { grid-column: 1 / -1; }
+  .admin-document-list > li { align-items: flex-start; flex-direction: column; }
+  .admin-document-list .admin-signup-actions { width: 100%; justify-content: flex-start; }
   .player-profile-page { grid-template-columns: minmax(0, 1fr); gap: 24px; min-height: auto; padding: 40px 0 55px; }
   .app-shell { padding: 0 22px 32px; }
   .topbar { min-height: 65px; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; padding: 9px 0 0; }

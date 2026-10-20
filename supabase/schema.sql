@@ -129,6 +129,13 @@ set public = false,
     file_size_limit = excluded.file_size_limit,
     allowed_mime_types = excluded.allowed_mime_types;
 
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('club-documents', 'club-documents', false, 26214400, null)
+on conflict (id) do update
+set public = false,
+    file_size_limit = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
+
 alter table public.matches add column if not exists finish_method text;
 alter table public.matches add column if not exists leg_starter_name text;
 alter table public.matches add column if not exists court_number smallint not null default 1 check (court_number between 1 and 5);
@@ -517,4 +524,34 @@ create policy "Members can delete their own profile avatar"
   using (
     bucket_id = 'profile-avatars'
     and (storage.foldername(name))[1] = (select auth.uid())::text
+  );
+
+drop policy if exists "Club admins can view club documents" on storage.objects;
+create policy "Club admins can view club documents"
+  on storage.objects
+  for select
+  to authenticated
+  using (
+    bucket_id = 'club-documents'
+    and (select public.is_club_admin())
+  );
+
+drop policy if exists "Club admins can upload club documents" on storage.objects;
+create policy "Club admins can upload club documents"
+  on storage.objects
+  for insert
+  to authenticated
+  with check (
+    bucket_id = 'club-documents'
+    and (select public.is_club_admin())
+  );
+
+drop policy if exists "Club admins can delete club documents" on storage.objects;
+create policy "Club admins can delete club documents"
+  on storage.objects
+  for delete
+  to authenticated
+  using (
+    bucket_id = 'club-documents'
+    and (select public.is_club_admin())
   );

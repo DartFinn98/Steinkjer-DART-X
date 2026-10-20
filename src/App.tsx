@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { getCheckoutHint } from './checkout'
-import { addTournamentCupRound, beginGuestSession, deleteAllClubTournaments, deleteClubSignup, deleteClubTournament, deleteSavedMatch, deleteSavedPlayer, endGuestSession, finishTournamentMatch, getGuestDisplayName, loadClubAdminStatus, loadClubAdmins, loadClubSignups, loadClubTournaments, loadLinkedPlayerProfile, loadRegisteredPlayerNames, loadSavedData, saveClubSignup, saveClubTournament, saveFinishedMatch, saveLinkedPlayerId, savePlayers, saveTournamentMatchProgress, sendMatchReport, setClubAdminRole, syncPendingChanges, updateClubSignup, uploadProfileAvatar } from './database'
-import type { ClubAdmin, ClubSignup, ClubTournament, SavedData, TournamentGameHistory, TournamentMatch, TournamentMatchProgress, TournamentGamePlayer } from './database'
+import { addTournamentCupRound, beginGuestSession, deleteAllClubTournaments, deleteClubDocument, deleteClubSignup, deleteClubTournament, deleteSavedMatch, deleteSavedPlayer, downloadClubDocument, endGuestSession, finishTournamentMatch, getGuestDisplayName, loadClubAdminStatus, loadClubAdmins, loadClubDocuments, loadClubSignups, loadClubTournaments, loadLinkedPlayerProfile, loadRegisteredPlayerNames, loadSavedData, saveClubSignup, saveClubTournament, saveFinishedMatch, saveLinkedPlayerId, savePlayers, saveTournamentMatchProgress, sendMatchReport, setClubAdminRole, syncPendingChanges, updateClubSignup, uploadClubDocument, uploadProfileAvatar } from './database'
+import type { ClubAdmin, ClubDocument, ClubSignup, ClubTournament, SavedData, TournamentGameHistory, TournamentMatch, TournamentMatchProgress, TournamentGamePlayer } from './database'
 import { supabase } from './supabase'
 import type { Session } from '@supabase/supabase-js'
 import { summarizePlayer } from './stats'
@@ -536,6 +536,11 @@ function summarizeCareer(matches: SavedData['matches'], playerId: string) {
   }
 }
 
+function formatDocumentSize(size: number): string {
+  if (size < 1024 * 1024) return `${Math.max(1, Math.round(size / 1024))} KB`
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`
+}
+
 function App() {
   const [appSection, setAppSection] = useState<AppSection>('scoreboard')
   const [playerCount, setPlayerCount] = useState(2)
@@ -610,6 +615,13 @@ function App() {
   const [adminEditDate, setAdminEditDate] = useState('')
   const [adminEditName, setAdminEditName] = useState('')
   const [adminExportDate, setAdminExportDate] = useState('all')
+  const [adminDocuments, setAdminDocuments] = useState<ClubDocument[]>([])
+  const [adminDocumentsLoading, setAdminDocumentsLoading] = useState(false)
+  const [adminDocumentsBusy, setAdminDocumentsBusy] = useState(false)
+  const [adminDocumentsMessage, setAdminDocumentsMessage] = useState('')
+  const [adminDocumentsMessageIsError, setAdminDocumentsMessageIsError] = useState(false)
+  const [adminDocumentAction, setAdminDocumentAction] = useState<string | null>(null)
+  const [adminDocumentPendingDelete, setAdminDocumentPendingDelete] = useState<string | null>(null)
   const [clubAdmins, setClubAdmins] = useState<ClubAdmin[]>([])
   const [adminEmail, setAdminEmail] = useState('')
   const [adminRoleBusy, setAdminRoleBusy] = useState(false)
@@ -821,6 +833,27 @@ function App() {
     })
     return () => { mounted = false }
   }, [appSection, isClubAdmin])
+
+  useEffect(() => {
+    if (appSection !== 'admin' || !isClubAdmin) return
+    let mounted = true
+    setAdminDocumentsLoading(true)
+    setAdminDocumentsMessage('')
+    setAdminDocumentsMessageIsError(false)
+    void loadClubDocuments().then((documents) => {
+      if (mounted) setAdminDocuments(documents)
+    }).catch((error: unknown) => {
+      if (mounted) {
+        setAdminDocumentsMessage(error instanceof Error
+          ? `Kunne ikke hente dokumentene: ${error.message}`
+          : 'Kunne ikke hente dokumentene. Kontroller Supabase-oppsettet.')
+        setAdminDocumentsMessageIsError(true)
+      }
+    }).finally(() => {
+      if (mounted) setAdminDocumentsLoading(false)
+    })
+    return () => { mounted = false }
+  }, [appSection, isClubAdmin, isOnline])
 
   useEffect(() => {
     if (appSection !== 'admin' && appSection !== 'tournament') return
@@ -1657,6 +1690,80 @@ function App() {
     }
   }
 
+  async function uploadAdminDocuments(files: File[]) {
+    if (files.length === 0) return
+    setAdminDocumentsBusy(true)
+    setAdminDocumentsMessage('')
+    setAdminDocumentsMessageIsError(false)
+    let uploadedCount = 0
+    const failures: string[] = []
+    try {
+      for (const file of files) {
+        try {
+          await uploadClubDocument(file)
+          uploadedCount += 1
+        } catch (error) {
+          failures.push(`${file.name}: ${error instanceof Error ? error.message : 'Opplastingen mislyktes.'}`)
+        }
+      }
+      try {
+        setAdminDocuments(await loadClubDocuments())
+      } catch (error) {
+        failures.push(error instanceof Error ? `Listen kunne ikke oppdateres: ${error.message}` : 'Dokumentlisten kunne ikke oppdateres.')
+      }
+      setAdminDocumentsMessageIsError(failures.length > 0)
+      setAdminDocumentsMessage(failures.length > 0
+        ? `${uploadedCount} dokument(er) lastet opp. ${failures.join(' ')}`
+        : `${uploadedCount} dokument(er) lastet opp.`)
+    } finally {
+      setAdminDocumentsBusy(false)
+    }
+  }
+
+  async function downloadAdminDocument(document: ClubDocument) {
+    setAdminDocumentAction(document.path)
+    setAdminDocumentsMessage('')
+    setAdminDocumentsMessageIsError(false)
+    try {
+      const blob = await downloadClubDocument(document.path)
+      const url = URL.createObjectURL(blob)
+      const link = window.document.createElement('a')
+      link.href = url
+      link.download = document.name
+      link.click()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (error) {
+      setAdminDocumentsMessage(error instanceof Error ? `Kunne ikke laste ned dokumentet: ${error.message}` : 'Dokumentet kunne ikke lastes ned.')
+      setAdminDocumentsMessageIsError(true)
+    } finally {
+      setAdminDocumentAction(null)
+    }
+  }
+
+  async function removeAdminDocument(document: ClubDocument) {
+    setAdminDocumentAction(document.path)
+    setAdminDocumentsMessage('')
+    setAdminDocumentsMessageIsError(false)
+    try {
+      await deleteClubDocument(document.path)
+      setAdminDocumentPendingDelete(null)
+      try {
+        setAdminDocuments(await loadClubDocuments())
+        setAdminDocumentsMessage('Dokumentet er slettet.')
+      } catch (error) {
+        setAdminDocumentsMessage(error instanceof Error
+          ? `Dokumentet er slettet, men listen kunne ikke oppdateres: ${error.message}`
+          : 'Dokumentet er slettet, men dokumentlisten kunne ikke oppdateres.')
+        setAdminDocumentsMessageIsError(true)
+      }
+    } catch (error) {
+      setAdminDocumentsMessage(error instanceof Error ? `Kunne ikke slette dokumentet: ${error.message}` : 'Dokumentet kunne ikke slettes.')
+      setAdminDocumentsMessageIsError(true)
+    } finally {
+      setAdminDocumentAction(null)
+    }
+  }
+
   function showTournamentError(errorMessage: string) {
     setTournamentMessage(errorMessage)
     setTournamentMessageIsError(true)
@@ -2128,6 +2235,42 @@ function App() {
                 })}</ul>
               </section>
             })}
+          </section>
+          <section className="admin-panel admin-documents-panel">
+            <div className="admin-section-heading">
+              <div><p className="eyebrow">FILER</p><h2>Dokumenter</h2></div>
+              <label className={`primary-button admin-document-upload${adminDocumentsBusy ? ' is-disabled' : ''}`}>
+                {adminDocumentsBusy ? 'LASTER OPP …' : 'Last opp dokumenter'}
+                <input
+                  type="file"
+                  multiple
+                  disabled={adminDocumentsBusy || adminDocumentsLoading}
+                  onChange={(event) => {
+                    const files = Array.from(event.currentTarget.files ?? [])
+                    event.currentTarget.value = ''
+                    void uploadAdminDocuments(files)
+                  }}
+                />
+              </label>
+            </div>
+            <p className="admin-document-note">Privat lagring for administratorer. Maks 25 MB per fil.</p>
+            {adminDocumentsMessage && <p className={`admin-message${adminDocumentsMessageIsError ? ' is-error' : ''}`} role={adminDocumentsMessageIsError ? 'alert' : 'status'}>{adminDocumentsMessage}</p>}
+            {adminDocumentsLoading ? <p className="admin-empty">Henter dokumenter …</p>
+              : adminDocuments.length === 0 ? <p className="admin-empty">Ingen dokumenter lastet opp ennå.</p>
+                : <ul className="admin-document-list">{adminDocuments.map((document) => {
+                  const isConfirmingDelete = adminDocumentPendingDelete === document.path
+                  const isBusy = adminDocumentAction === document.path
+                  const createdAt = document.createdAt ? new Date(document.createdAt).toLocaleDateString('nb-NO') : null
+                  return <li key={document.path}>
+                    <div className="admin-document-details">
+                      <span className="admin-document-name">{document.name}</span>
+                      <span>{formatDocumentSize(document.size)}{createdAt ? ` · ${createdAt}` : ''}</span>
+                    </div>
+                    {isConfirmingDelete
+                      ? <div className="admin-signup-actions"><span>Slette dokumentet?</span><button className="admin-delete-confirm" type="button" disabled={isBusy} onClick={() => void removeAdminDocument(document)}>Ja, slett</button><button type="button" disabled={isBusy} onClick={() => setAdminDocumentPendingDelete(null)}>Avbryt</button></div>
+                      : <div className="admin-signup-actions"><button type="button" disabled={isBusy} onClick={() => void downloadAdminDocument(document)}>{isBusy ? 'VENT …' : 'Last ned'}</button><button className="admin-delete-button" type="button" disabled={isBusy} onClick={() => setAdminDocumentPendingDelete(document.path)}>Slett</button></div>}
+                  </li>
+                })}</ul>}
           </section>
           <TournamentBoard
             tournament={selectedTournament}

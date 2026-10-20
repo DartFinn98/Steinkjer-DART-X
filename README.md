@@ -63,7 +63,7 @@ where lower(email) = lower('din-epost@example.no')
 on conflict (user_id) do nothing;
 ```
 
-Logg deretter inn i appen på nytt. Administratorer får menyvalget **Administrasjon**, der de kan se kommende deltakerlister samlet, rette navn eller dato, slette feilpåmeldinger og laste ned en CSV-fil for én eller alle klubbkvelder. Administratorer kan også gi eller fjerne rollen ved å skrive inn e-postadressen til en eksisterende, e-postbekreftet konto. Kontoen må være opprettet før rollen gis. Rollen kan ikke gis direkte fra appen av en vanlig bruker, og administratorer kan ikke fjerne sin egen rolle.
+Logg deretter inn i appen på nytt. Administratorer får menyvalget **Administrasjon**, der de kan se kommende deltakerlister samlet, rette navn eller dato, slette feilpåmeldinger og laste ned en CSV-fil for én eller alle klubbkvelder. De kan også laste opp, laste ned og slette private klubb-dokumenter på opptil 25 MB per fil. Dokumentene er bare tilgjengelige for klubbadministratorer. Kjør `supabase/schema.sql` på nytt for å opprette den private Storage-bøtten og tilhørende administratorpolicyer. Administratorer kan også gi eller fjerne rollen ved å skrive inn e-postadressen til en eksisterende, e-postbekreftet konto. Kontoen må være opprettet før rollen gis. Rollen kan ikke gis direkte fra appen av en vanlig bruker, og administratorer kan ikke fjerne sin egen rolle.
 
 Administratorrollen håndheves av Supabase Row Level Security og databasefunksjoner; det er ikke tilstrekkelig å bare vise eller skjule menyknappen. Ikke del Supabase `service_role`-nøkkelen.
 
