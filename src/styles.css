@@ -774,10 +774,11 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
   .tournament-print-bracket-headings { display: grid; gap: 3mm; margin: 4mm 0 2mm; }
   .tournament-print-bracket-headings h3 { margin: 0; padding-bottom: 1mm; border-bottom: 1px solid #777; font-size: 8pt; text-align: center; }
   .tournament-print-bracket { display: grid; height: 158mm; gap: 1mm 3mm; }
-  .tournament-print-bracket-match { position: relative; align-self: center; display: grid; grid-template-columns: minmax(0, 1fr) 7mm; grid-template-rows: 1fr 1fr; min-width: 0; border: 1px solid #777; background: #fff; font-size: 6.5pt; line-height: 1.1; }
+  .tournament-print-bracket-match { position: relative; align-self: center; display: grid; grid-template-columns: minmax(0, 1fr) 7mm; grid-template-rows: 1fr 1fr auto; min-width: 0; min-height: 8mm; border: 1px solid #777; background: #fff; font-size: 6.5pt; line-height: 1.1; }
   .tournament-print-bracket-match > span { min-width: 0; overflow: hidden; padding: .5mm 1mm; text-overflow: ellipsis; white-space: nowrap; }
   .tournament-print-bracket-match > span:nth-child(even) { border-left: 1px solid #aaa; text-align: center; }
   .tournament-print-bracket-match > span:nth-child(n+3) { border-top: 1px solid #aaa; }
+  .tournament-print-bracket-match > .tournament-print-bracket-referee { grid-column: 1 / -1; color: #333; font-size: 5.5pt; }
   .tournament-print-cup-footer { display: flex; justify-content: space-between; gap: 5mm; margin-top: 4mm; font-size: 8pt; }
   .tournament-print-cup-footer strong { font-size: 8pt; }
 }

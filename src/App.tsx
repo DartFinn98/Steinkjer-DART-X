@@ -378,9 +378,9 @@ function TournamentBoard({
           const status = matchInProgress ? `${baseStatus} · kamp kan fortsettes` : baseStatus
           return <li key={archived.eventDate}>
             <div className="tournament-archive-info"><strong>{formatClubDate(archived.eventDate)}</strong><span>{archived.participants.length} spillere · {status}</span>
-              {pendingDeleteDate === archived.eventDate && <div className="tournament-delete-confirmation" role="alert"><span>Slette turneringen fra {formatClubDate(archived.eventDate)}? Dette kan ikke angres.</span><button className="tournament-delete-button" type="button" disabled={deleting} onClick={() => onDeleteTournament(archived.eventDate)}>{deleting ? 'Sletter …' : 'Ja, slett'}</button><button type="button" disabled={deleting} onClick={onCancelDelete}>Avbryt</button></div>}
+              {pendingDeleteDate === archived.eventDate && <div className="tournament-delete-confirmation" role="alert"><span>Slette turneringen fra {formatClubDate(archived.eventDate)}? Alle resultater og kampframdrift slettes permanent. {matchInProgress ? 'En pågående kamp avbrytes og kan ikke gjenopptas. ' : ''}Dette kan ikke angres.</span><button className="tournament-delete-button" type="button" disabled={deleting} onClick={() => onDeleteTournament(archived.eventDate)}>{deleting ? 'Sletter …' : 'Ja, slett'}</button><button type="button" disabled={deleting} onClick={onCancelDelete}>Avbryt</button></div>}
             </div>
-            <div className="tournament-archive-actions"><button type="button" disabled={archived.eventDate === eventDate} aria-pressed={archived.eventDate === eventDate} onClick={() => onEventDateChange(archived.eventDate)}>{archived.eventDate === eventDate ? 'Valgt' : 'Åpne ark'}</button><button className="tournament-delete-button" type="button" disabled={deleting || pendingDeleteDate !== null || activeTournamentDate === archived.eventDate} onClick={() => onRequestDeleteTournament(archived.eventDate)}>Slett</button></div>
+            <div className="tournament-archive-actions"><button type="button" disabled={archived.eventDate === eventDate} aria-pressed={archived.eventDate === eventDate} onClick={() => onEventDateChange(archived.eventDate)}>{archived.eventDate === eventDate ? 'Valgt' : 'Åpne ark'}</button><button className="tournament-delete-button" type="button" disabled={deleting || pendingDeleteDate !== null} onClick={() => onRequestDeleteTournament(archived.eventDate)}>Slett</button></div>
           </li>
         })}</ul>
       </section>}
@@ -442,7 +442,9 @@ function TournamentBoard({
           const roundCount = Math.ceil(Math.log2(firstRoundCount)) + 1
           const roundTitle = (matchCount: number, round: number) => matchCount === 1
             ? 'Finale'
-            : matchCount === 2 ? 'Semifinale' : `Runde ${round}`
+            : matchCount === 2 ? 'Semifinale'
+              : matchCount === 4 ? 'Kvartfinale'
+                : matchCount === 8 ? 'Åttedelsfinale' : `Runde ${round}`
           return <section className="tournament-print-sheet tournament-print-cup" key="print-cup-bracket">
             <div className="tournament-print-pool-heading"><h2>Sluttspill · cup</h2><p>{formatClubDate(tournament.eventDate)}</p></div>
             <div className="tournament-print-bracket-headings" style={{ gridTemplateColumns: `repeat(${roundCount}, minmax(0, 1fr))` }}>{Array.from({ length: roundCount }, (_, roundIndex) => {
@@ -474,6 +476,8 @@ function TournamentBoard({
                       : round === 1 ? '' : sourceMatches[1]?.winnerSignupId
                         ? participantName(sourceMatches[1].winnerSignupId)
                         : `Vinner kamp ${index * 2 + 2}`
+                  const refereeSignupId = match ? getTournamentMatchRefereeSignupId(tournament, match) : null
+                  const refereeName = refereeSignupId ? participantName(refereeSignupId) : 'Ikke tildelt'
                   const rowStart = 1 + index * 2 ** (roundIndex + 1)
                   const rowSpan = 2 ** (roundIndex + 1)
                   return <div className="tournament-print-bracket-match" key={match?.id ?? `cup-${round}-${index}`} style={{
@@ -482,6 +486,7 @@ function TournamentBoard({
                   }}>
                     <span>{playerOne}</span><span>{match?.playerOneLegs ?? ''}</span>
                     <span>{playerTwo}</span><span>{match?.playerTwoLegs ?? ''}</span>
+                    <span className="tournament-print-bracket-referee">Dommer: {refereeName}</span>
                   </div>
                 })
               })}
@@ -1626,8 +1631,7 @@ function App() {
     }, nextHistory.at(-1) ?? null)
   }
 
-  function newGame() {
-    if (activeTournamentMatch && matchWinnerId) return
+  function resetCurrentGame() {
     cancelCoinFlip()
     setPlayers([])
     setActivePlayer(0)
@@ -1649,6 +1653,11 @@ function App() {
     setActiveTournamentMatch(null)
     setSavedTournamentResultDate(null)
     setTournamentMatchMessage('')
+  }
+
+  function newGame() {
+    if (activeTournamentMatch && matchWinnerId) return
+    resetCurrentGame()
   }
 
   function startNextLeg() {
@@ -2048,18 +2057,15 @@ function App() {
 
   async function removeTournament(eventDate: string) {
     if (!isClubAdmin) return
-    const tournamentHasActiveMatch = clubTournamentsRef.current
-      .find((tournament) => tournament.eventDate === eventDate)
-      ?.matches.some((match) => match.inProgress) ?? false
-    if (activeTournamentMatch?.eventDate === eventDate || tournamentHasActiveMatch) {
-      showTournamentError('Avslutt turneringskampen før du sletter denne turneringen.')
-      return
-    }
     setTournamentDeleting(true)
     setTournamentMessage('')
     setTournamentMessageIsError(false)
     try {
+      if (activeTournamentMatch?.eventDate === eventDate) {
+        await tournamentProgressSaveQueue.current
+      }
       await deleteClubTournament(eventDate)
+      if (activeTournamentMatch?.eventDate === eventDate) resetCurrentGame()
       setClubTournaments((current) => current.filter((tournament) => tournament.eventDate !== eventDate))
       setPendingTournamentDeleteDate(null)
       setTournamentMessage('Turneringen er slettet.')
