@@ -511,12 +511,12 @@ function formatSavedMatchPlayers(match: SavedData['matches'][number]): string {
       const members = match.players.filter((player) => player.teamId === teamId)
       if (members.length === 0) return null
       const wins = Math.max(0, ...members.map((player) => player.legsWon ?? 0))
-      return `Lag ${teamId} (${members.map((player) => player.name).join(' + ')}): ${wins} ${wins === 1 ? 'legg' : 'legger'}`
+      return `Lag ${teamId} (${members.map((player) => player.name).join(' + ')}): ${wins} legg`
     }).filter(Boolean).join(' · ')
   }
   return match.players.map((player) => player.legsWon === undefined
     ? `${player.name}: ${player.score} poeng`
-    : `${player.name}: ${player.legsWon} ${match.gameMode === '121' ? player.legsWon === 1 ? 'runde' : 'runder' : player.legsWon === 1 ? 'legg' : 'legger'}`).join(' · ')
+    : `${player.name}: ${player.legsWon} ${match.gameMode === '121' ? player.legsWon === 1 ? 'runde' : 'runder' : 'legg'}`).join(' · ')
 }
 
 function formatSavedVisit(visit: SavedData['matches'][number]['players'][number]['visits'][number]): string {
@@ -1042,7 +1042,7 @@ function App() {
   const legNumber = legScorePlayers.reduce((total, player) => total + (legsWon[player.id] ?? 0), 0) + 1
   const roundWord = gameMode === '121' ? 'RUNDE' : 'LEGG'
   const roundWordLower = gameMode === '121' ? 'runde' : 'legg'
-  const roundWordPlural = gameMode === '121' ? 'runder' : 'legger'
+  const roundWordPlural = gameMode === '121' ? 'runder' : 'legg'
   const checkoutHint = currentPlayer && gameMode !== 'cricket' ? getCheckoutHint(currentPlayer.score) : null
   const dartLimitBullOff = gameMode === '501'
     && players.length > 1
@@ -2694,7 +2694,7 @@ function App() {
             <fieldset className="match-format game-mode-format">
               <legend>SPILLTYPE</legend>
               <div className="game-mode-options">{([{ id: '501', label: '501' }, { id: 'cricket', label: 'Cricket' }, { id: '121', label: '121 utgang' }] as const).map((mode) => <button key={mode.id} type="button" aria-pressed={gameMode === mode.id} className={gameMode === mode.id ? 'format-option selected' : 'format-option'} onClick={() => selectGameMode(mode.id)}>{mode.label}</button>)}</div>
-              <p>{gameMode === 'cricket' ? 'Tre treff lukker 15–20 og bull. Treff på lukkede felt gir poeng så lenge motstanderen har feltet åpent.' : gameMode === '121' ? 'Hver runde starter på 121. Dobbel ut gjelder.' : 'Først til valgt antall legger vinner kampen.'}</p>
+              <p>{gameMode === 'cricket' ? 'Tre treff lukker 15–20 og bull. Treff på lukkede felt gir poeng så lenge motstanderen har feltet åpent.' : gameMode === '121' ? 'Hver runde starter på 121. Dobbel ut gjelder.' : 'Først til valgt antall legg vinner kampen.'}</p>
             </fieldset>
             <fieldset className="match-format">
               <legend>KAMPFORMAT</legend>
@@ -2849,7 +2849,7 @@ function App() {
         <header className="history-dialog-heading"><div><p className="eyebrow">ARKIVERT KAMP · BANE {selectedMatch.courtNumber ?? 1}</p><h2 id="history-dialog-title">{selectedMatch.winnerName} vant</h2><p>{new Intl.DateTimeFormat('nb-NO', { dateStyle: 'full', timeStyle: 'short' }).format(new Date(selectedMatch.playedAt))} · {selectedMatch.gameMode === 'cricket' ? 'Cricket' : selectedMatch.gameMode === '121' ? '121 utgang' : '501'}{selectedMatch.bestOfLegs ? ` · Best av ${selectedMatch.bestOfLegs}` : ''}{selectedMatch.finishMethod ? ` · ${selectedMatch.finishMethod === 'bull-off' ? 'Bullkast' : 'Dobbel ut'}` : ''}</p></div><button className="text-button" type="button" onClick={() => setSelectedMatch(null)}>Lukk</button></header>
         {selectedMatch.legStarterName && <p className="history-dialog-starter">Startet på {selectedMatch.legStarterName}</p>}
         <div className="history-player-details">{selectedMatch.players.map((player) => <article className="history-player-detail" key={player.name}>
-          <div className="history-player-heading"><h3>{player.teamId && <span>LAG {player.teamId} · </span>}{player.name}</h3><strong>{player.legsWon ?? 0} {player.legsWon === 1 ? selectedMatch.gameMode === '121' ? 'runde' : 'legg' : selectedMatch.gameMode === '121' ? 'runder' : 'legger'}</strong></div>
+          <div className="history-player-heading"><h3>{player.teamId && <span>LAG {player.teamId} · </span>}{player.name}</h3><strong>{player.legsWon ?? 0} {selectedMatch.gameMode === '121' ? (player.legsWon === 1 ? 'runde' : 'runder') : 'legg'}</strong></div>
           <dl className="history-player-stats"><div><dt>SLUTTPOENG</dt><dd>{player.score}</dd></div><div><dt>3-PILSSNITT</dt><dd>{(player.average3 ?? 0).toFixed(1)}</dd></div><div><dt>PILER</dt><dd>{player.dartsThrown ?? 0}</dd></div><div><dt>HØYESTE</dt><dd>{player.highestVisit ?? 0}</dd></div><div><dt>180</dt><dd>{player.oneEighties ?? 0}</dd></div><div><dt>RASK UTGANG</dt><dd>{player.fastestCheckoutDarts ?? '—'}</dd></div></dl>
           <h4>TURER</h4>
           {(player.visits ?? []).length > 0 ? <ol className="history-visits">{(player.visits ?? []).map((visit, index) => <li key={`${visit.legNumber}-${index}`}><span>{selectedMatch.gameMode === '121' ? 'RUNDE' : 'LEGG'} {visit.legNumber} · TUR {index + 1}</span><strong>{formatSavedVisit(visit)}</strong><span>{visit.bust ? 'BUST' : visit.checkout ? 'UTGANG' : `${visit.total} POENG`} · {visit.dartsThrown ?? 3} PILER</span></li>)}</ol> : <p className="history-no-visits">Ingen turer ble lagret for denne kampen.</p>}
