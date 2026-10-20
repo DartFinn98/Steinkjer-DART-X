@@ -2797,6 +2797,7 @@ function App() {
               const isActive = index === activePlayer && !winnerId
               const visibleLeg = winnerId ? legNumber - 1 : legNumber
               const legVisits = player.visits.filter((visit) => visit.legNumber === visibleLeg)
+              const legDartsThrown = legVisits.reduce((total, visit) => total + visit.dartsThrown, 0)
               const lastVisit = legVisits.at(-1)
               const playerLegsWon = teamMode
                 ? Math.max(0, ...teamMembers(players, player).map((member) => legsWon[member.id] ?? 0))
@@ -2813,7 +2814,7 @@ function App() {
                   })}</div>}
                   <div className="legs-progress" aria-label={`${playerLegsWon} av ${legsToWin} ${roundWordPlural}`}><div>{Array.from({ length: legsToWin }, (_, legIndex) => <span key={legIndex} className={legIndex < playerLegsWon ? 'leg-pip earned' : 'leg-pip'} />)}</div><span>{playerLegsWon} / {legsToWin} {roundWordPlural.toUpperCase()}</span></div>
                   {gameMode !== 'cricket' && <div className={`player-stats${gameMode === '501' ? ' has-fastest-checkout' : ''}`} aria-label={`3-pilssnitt ${stats.average3.toFixed(1)}, ${stats.tons} 100-plussrunder, ${stats.oneEighties} 180-ere${gameMode === '501' ? `, raskeste 501-utgang ${stats.fastestCheckoutDarts === null ? 'ikke registrert' : `${stats.fastestCheckoutDarts} piler`}` : ''}`}><div><strong>{stats.average3.toFixed(1)}</strong><span>3-PILSSNITT</span></div><div><strong>{stats.tons}</strong><span>100+</span></div><div><strong>{stats.oneEighties}</strong><span>180</span></div><div><strong>{stats.highestVisit}</strong><span>HØYESTE</span></div>{gameMode === '501' && <div><strong>{stats.fastestCheckoutDarts ?? '—'}</strong><span title="Færrest piler brukt på en 501-legg">RASK 501</span></div>}</div>}
-                  <div className="player-card-bottom"><span>{legVisits.length} {legVisits.length === 1 ? 'TUR' : 'TURER'} I {roundWord}</span>{player.scoreCorrected ? <span className="last-visit">POENGSUM RETTET</span> : lastVisit && <span className={lastVisit.bust ? 'last-visit bust-label' : 'last-visit'}>{lastVisit.bust ? 'SISTE TUR: BUST' : lastVisit.checkout ? 'UTGANG' : `SISTE TUR: ${lastVisit.total}`}</span>}</div>
+                  <div className="player-card-bottom"><span>{gameMode === '501' ? `${legDartsThrown} PILER` : `${legVisits.length} ${legVisits.length === 1 ? 'TUR' : 'TURER'} I ${roundWord}`}</span>{player.scoreCorrected ? <span className="last-visit">POENGSUM RETTET</span> : lastVisit && <span className={lastVisit.bust ? 'last-visit bust-label' : 'last-visit'}>{lastVisit.bust ? 'SISTE TUR: BUST' : lastVisit.checkout ? 'UTGANG' : `SISTE TUR: ${lastVisit.total}`}</span>}</div>
                 </article>
               )
             })}
