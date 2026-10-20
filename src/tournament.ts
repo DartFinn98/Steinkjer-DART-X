@@ -214,6 +214,15 @@ export function createNextCupRound(tournament: ClubTournament): ClubTournament {
     const playerOne = winners[index]
     const playerTwo = winners[index + 1]
     if (!playerOne || !playerTwo) throw new Error('Cup-runden har et ugyldig antall spillere.')
+    const parentPositions = new Set([index, index + 1])
+    const refereeSignupId = currentRoundMatches
+      .filter((match) => parentPositions.has(match.bracketPosition))
+      .map((match) => match.winnerSignupId === match.playerOneSignupId
+        ? match.playerTwoSignupId
+        : match.winnerSignupId === match.playerTwoSignupId
+          ? match.playerOneSignupId
+          : null)
+      .find((signupId): signupId is string => Boolean(signupId))
     matches.push({
       id: `cup:${roundNumber}:${index / 2}`,
       phase: 'cup',
@@ -225,6 +234,7 @@ export function createNextCupRound(tournament: ClubTournament): ClubTournament {
       playerOneLegs: null,
       playerTwoLegs: null,
       winnerSignupId: null,
+      ...(refereeSignupId ? { refereeSignupId } : {}),
       bestOfLegs: bestOfLegs as 5 | 7 | 9,
     })
   }
@@ -234,4 +244,45 @@ export function createNextCupRound(tournament: ClubTournament): ClubTournament {
     cupRound: roundNumber,
     updatedAt: new Date().toISOString(),
   }
+}
+
+export function getNextQueuedTournamentMatch(tournament: ClubTournament): TournamentMatch | null {
+  const matches = tournament.cupRound > 0
+    ? tournament.matches.filter((match) => match.phase === 'cup' && match.roundNumber === tournament.cupRound)
+    : tournament.matches.filter((match) => match.phase === 'pool')
+  return matches
+    .filter((match) => match.winnerSignupId === null && !match.inProgress && match.playerTwoSignupId !== null)
+    .sort((first, second) => first.poolNumber !== second.poolNumber
+      ? (first.poolNumber ?? 0) - (second.poolNumber ?? 0)
+      : first.bracketPosition - second.bracketPosition)[0] ?? null
+}
+
+export function getTournamentMatchRefereeSignupId(tournament: ClubTournament, match: TournamentMatch): string | null {
+  if (match.inProgress) {
+    return match.inProgress.refereeSignupId ?? match.refereeSignupId ?? null
+  }
+  if (match.refereeSignupId) return match.refereeSignupId
+  if (match.phase !== 'pool' || match.poolNumber === null || match.winnerSignupId !== null) return null
+
+  const activeSignupIds = new Set(tournament.matches
+    .filter((candidate) => candidate.inProgress && candidate.id !== match.id)
+    .flatMap((candidate) => [candidate.playerOneSignupId, candidate.playerTwoSignupId ?? '']))
+  const nextMatch = tournament.matches
+    .filter((candidate) => candidate.phase === 'pool'
+      && candidate.poolNumber === match.poolNumber
+      && candidate.bracketPosition > match.bracketPosition
+      && candidate.winnerSignupId === null
+      && !candidate.inProgress
+      && candidate.playerTwoSignupId !== null)
+    .sort((first, second) => first.bracketPosition - second.bracketPosition)[0]
+  if (!nextMatch) return null
+
+  const currentPlayers = new Set<string>([
+    match.playerOneSignupId,
+    ...(match.playerTwoSignupId ? [match.playerTwoSignupId] : []),
+  ])
+  return [nextMatch.playerOneSignupId, ...(nextMatch.playerTwoSignupId ? [nextMatch.playerTwoSignupId] : [])]
+    .find((signupId): signupId is string => Boolean(signupId)
+      && !currentPlayers.has(signupId)
+      && !activeSignupIds.has(signupId)) ?? null
 }

@@ -75,6 +75,7 @@ export type TournamentGameHistory = {
 export type TournamentMatchProgress = {
   progressId?: string
   courtNumber?: 1 | 2 | 3 | 4 | 5
+  refereeSignupId?: string
   players: TournamentGamePlayer[]
   activePlayer: number
   legsWon: Record<string, number>
@@ -98,6 +99,7 @@ export type TournamentMatch = {
   playerOneLegs: number | null
   playerTwoLegs: number | null
   winnerSignupId: string | null
+  refereeSignupId?: string
   bestOfLegs: 3 | 5 | 7 | 9
   inProgress?: TournamentMatchProgress
 }

@@ -151,6 +151,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .tournament-day-queue { display: grid; gap: 7px; padding-top: 10px; border-top: 1px solid var(--line); }
 .tournament-day-queue h4 { margin: 0; }
 .tournament-day-queue li > span { min-width: 0; font-size: 10px; line-height: 1.4; overflow-wrap: anywhere; }
+.tournament-day-queue li > span small { display: block; margin-top: 4px; color: var(--green); font: 8px var(--mono); }
 .tournament-day-queue li .tournament-play-button { min-height: 33px; }
 .tournament-day-queue > p { margin: 0; color: var(--muted); font-size: 11px; }
 .tournament-draw { display: grid; gap: 14px; }
@@ -178,12 +179,14 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .tournament-match-info span:last-of-type { text-align: right; }
 .tournament-match-info b { color: var(--orange); }
 .tournament-match-info small { grid-column: 1 / -1; color: var(--muted); font: 8px var(--mono); }
+.tournament-match-info .tournament-referee { color: var(--green); }
 .tournament-play-button { flex: none; min-height: 36px; padding: 0 12px; border: 1px solid var(--green); background: var(--green); color: #fff; font-size: 10px; font-weight: 700; cursor: pointer; }
 .tournament-play-button:disabled { cursor: wait; opacity: .6; }
 .tournament-match-result { max-width: 45%; color: var(--green); font-size: 11px; text-align: right; overflow-wrap: anywhere; }
 .tournament-match-pending { color: var(--muted); font-size: 10px; }
 .tournament-resume-status { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -8px 0 0; color: var(--green); font-size: 11px; line-height: 1.5; }
 .tournament-resume-status.is-error { color: #9b452f; }
+.tournament-resume-status strong { display: block; margin-top: 4px; }
 .tournament-cup-round { margin-top: 16px; }
 .tournament-cup-round h4 { margin: 0; color: var(--green); font: 10px var(--mono); letter-spacing: .5px; text-transform: uppercase; }
 .tournament-actions { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding-top: 12px; border-top: 1px solid var(--line); }

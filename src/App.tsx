@@ -8,7 +8,7 @@ import type { Session } from '@supabase/supabase-js'
 import { summarizePlayer } from './stats'
 import { applyCricketVisit, CRICKET_TARGETS, hasWonCricket } from './cricket'
 import type { CricketDart, CricketMarks } from './cricket'
-import { createNextCupRound, drawClubPools, getPoolStandings, setTournamentAdvancement } from './tournament'
+import { createNextCupRound, drawClubPools, getNextQueuedTournamentMatch, getPoolStandings, getTournamentMatchRefereeSignupId, setTournamentAdvancement } from './tournament'
 
 type DartInputs = [string, string, string]
 type ScoredDart = { points: number; isDouble: boolean; target: number | null; marks: number }
@@ -212,6 +212,8 @@ function TournamentBoard({
           if (!progress) return null
           const playerOne = participantName(match.playerOneSignupId)
           const playerTwo = match.playerTwoSignupId ? participantName(match.playerTwoSignupId) : 'Walkover'
+          const refereeSignupId = getTournamentMatchRefereeSignupId(tournament, match)
+          const refereeName = refereeSignupId ? participantName(refereeSignupId) : null
           const progressScore = `${progress.legsWon[progress.players[0]?.id ?? ''] ?? 0}–${progress.legsWon[progress.players[1]?.id ?? ''] ?? 0}`
           const roundLabel = match.phase === 'pool' ? `Pulje ${match.poolNumber}` : getRoundLabel(match.roundNumber, cupMatches.filter((item) => item.roundNumber === match.roundNumber).length)
           const availableForAssignment = ([1, 2, 3, 4, 5] as const).filter((court) => !activeMatches.some((other) => other.id !== match.id && other.inProgress?.courtNumber === court))
@@ -220,6 +222,7 @@ function TournamentBoard({
               <strong>{progress.courtNumber ? `Bane ${progress.courtNumber}` : 'Bane må tildeles'} · {roundLabel}</strong>
               <span>{playerOne} – {playerTwo}</span>
               <small>Stillingen er {progressScore} legg</small>
+              <small>{refereeName ? `Dommer: ${refereeName}` : 'Dommer ikke tildelt'}</small>
             </div>
             {isAdmin && !progress.courtNumber && <label className="tournament-board-select"><span>TILDEL BANE</span><select disabled={busy} value="" onChange={(event) => { const selectedCourt = Number(event.target.value); if (isCourtNumber(selectedCourt)) onAssignBoard(match, selectedCourt) }}><option value="">Velg bane</option>{availableForAssignment.map((court) => <option key={court} value={court}>Bane {court}</option>)}</select></label>}
             {isAdmin && progress.courtNumber && <button className="tournament-play-button" type="button" disabled={busy || !canResumeMatch} onClick={() => onPlayMatch(match)}>Fortsett på bane {progress.courtNumber}</button>}
@@ -229,7 +232,12 @@ function TournamentBoard({
           <h4>Neste kamper</h4>
           {queuedMatches.length > 0
             ? <ol>{queuedMatches.map((match) => <li key={match.id}>
-              <span>{match.phase === 'pool' ? `Pulje ${match.poolNumber}` : getRoundLabel(match.roundNumber, cupMatches.filter((item) => item.roundNumber === match.roundNumber).length)} · {participantName(match.playerOneSignupId)} – {participantName(match.playerTwoSignupId!)}</span>
+              <span>
+                {match.phase === 'pool' ? `Pulje ${match.poolNumber}` : getRoundLabel(match.roundNumber, cupMatches.filter((item) => item.roundNumber === match.roundNumber).length)} · {participantName(match.playerOneSignupId)} – {participantName(match.playerTwoSignupId!)}
+                <small>{getTournamentMatchRefereeSignupId(tournament, match)
+                  ? `Dommer: ${participantName(getTournamentMatchRefereeSignupId(tournament, match)!)}`
+                  : 'Dommer ikke tildelt'}</small>
+              </span>
               {isAdmin && <button className="tournament-play-button" type="button" disabled={busy || !canStartQueuedMatches || freeBoards.length === 0} onClick={() => onPlayMatch(match)}>{unassignedActiveMatches.length > 0 ? 'Tildel aktive baner først' : freeBoards.length > 0 ? `Start på bane ${freeBoards[0]}` : 'Alle baner er i bruk'}</button>}
             </li>)}</ol>
             : <p>{tournamentFinished ? 'Turneringen er ferdig.' : 'Ingen flere kamper venter i denne runden.'}</p>}
@@ -411,11 +419,15 @@ function TournamentMatchRow({ match, tournament, isAdmin, busy, canPlayMatch, ca
     ? tournament.participants.find((participant) => participant.signupId === match.playerTwoSignupId)?.playerName ?? 'Ukjent spiller'
     : 'Walkover'
   const completed = match.winnerSignupId !== null
+  const refereeSignupId = getTournamentMatchRefereeSignupId(tournament, match)
+  const refereeName = refereeSignupId
+    ? tournament.participants.find((participant) => participant.signupId === refereeSignupId)?.playerName
+    : null
   const progressScore = match.inProgress
     ? `${match.inProgress.legsWon[match.inProgress.players[0]?.id ?? ''] ?? 0}–${match.inProgress.legsWon[match.inProgress.players[1]?.id ?? ''] ?? 0}`
     : ''
   return <li className="tournament-match">
-    <div className="tournament-match-info"><span>{playerOne}</span><b>–</b><span>{playerTwo}</span><small>Best av {match.bestOfLegs}</small></div>
+    <div className="tournament-match-info"><span>{playerOne}</span><b>–</b><span>{playerTwo}</span><small>Best av {match.bestOfLegs}</small><small className="tournament-referee">{refereeName ? `Dommer: ${refereeName}` : 'Dommer ikke tildelt'}</small></div>
     {completed ? <strong className="tournament-match-result">{match.playerOneLegs !== null && match.playerTwoLegs !== null ? `${match.playerOneLegs}–${match.playerTwoLegs}` : 'Videre på walkover'} · {tournament.participants.find((participant) => participant.signupId === match.winnerSignupId)?.playerName}</strong>
       : isAdmin && match.playerTwoSignupId && match.inProgress ? <button className="tournament-play-button" type="button" disabled={busy || !canResumeMatch} onClick={() => onPlayMatch(match)}>Fortsett kampen · {progressScore} legg</button>
         : isAdmin && match.playerTwoSignupId ? <button className="tournament-play-button" type="button" disabled={busy || !canPlayMatch} onClick={() => onPlayMatch(match)}>Spill kamp på poengtavla</button>
@@ -693,6 +705,7 @@ function App() {
   const [confirmDeleteAllTournaments, setConfirmDeleteAllTournaments] = useState(false)
   const [tournamentDeleting, setTournamentDeleting] = useState(false)
   const [activeTournamentMatch, setActiveTournamentMatch] = useState<ActiveTournamentMatch | null>(null)
+  const [savedTournamentResultDate, setSavedTournamentResultDate] = useState<string | null>(null)
   const [tournamentMatchMessage, setTournamentMatchMessage] = useState('')
   const [linkedPlayerId, setLinkedPlayerId] = useState<string | null>(null)
   const [profilePlayerId, setProfilePlayerId] = useState('')
@@ -720,6 +733,22 @@ function App() {
     : adminUpcomingSignups.filter((signup) => signup.eventDate === adminExportDate)
   const currentTournamentSignups = clubSignups.filter((signup) => signup.eventDate === tournamentDate)
   const selectedTournament = clubTournaments.find((tournament) => tournament.eventDate === tournamentDate) ?? null
+  const savedTournament = savedTournamentResultDate
+    ? clubTournaments.find((tournament) => tournament.eventDate === savedTournamentResultDate) ?? null
+    : null
+  const savedTournamentNextMatch = savedTournament ? getNextQueuedTournamentMatch(savedTournament) : null
+  const activeTournament = activeTournamentMatch
+    ? clubTournaments.find((tournament) => tournament.eventDate === activeTournamentMatch.eventDate) ?? null
+    : null
+  const activeTournamentMatchRecord = activeTournamentMatch
+    ? activeTournament?.matches.find((match) => match.id === activeTournamentMatch.matchId) ?? null
+    : null
+  const activeTournamentRefereeId = activeTournament && activeTournamentMatchRecord
+    ? getTournamentMatchRefereeSignupId(activeTournament, activeTournamentMatchRecord)
+    : null
+  const activeTournamentRefereeName = activeTournamentRefereeId
+    ? activeTournament?.participants.find((participant) => participant.signupId === activeTournamentRefereeId)?.playerName ?? null
+    : null
   const tournamentEventDates = Array.from(new Set([
     ...adminEventDates,
     ...clubTournaments.map((tournament) => tournament.eventDate),
@@ -1518,6 +1547,7 @@ function App() {
     setManualBust(false)
     setMessage('')
     setActiveTournamentMatch(null)
+    setSavedTournamentResultDate(null)
     setTournamentMatchMessage('')
   }
 
@@ -2010,7 +2040,9 @@ function App() {
         .sort((first, second) => first.eventDate.localeCompare(second.eventDate))
       clubTournamentsRef.current = updatedTournaments
       setClubTournaments(updatedTournaments)
+      setTournamentDate(activeMatch.eventDate)
       setActiveTournamentMatch(null)
+      setSavedTournamentResultDate(activeMatch.eventDate)
       setTournamentMatchMessage('Turneringsresultatet er registrert automatisk.')
     } catch (error) {
       const details = tournamentErrorMessage(error, 'Ukjent lagringsfeil.')
@@ -2041,6 +2073,7 @@ function App() {
       playerTwoId: progress.players[1].id,
       progressId: progress.progressId,
     })
+    setSavedTournamentResultDate(null)
     setPlayers(progress.players)
     setPlayerNames(progress.players.map((player) => player.name))
     setPlayerCount(2)
@@ -2072,27 +2105,34 @@ function App() {
     setAppSection('scoreboard')
   }
 
-  async function startTournamentMatch(match: TournamentMatch) {
-    if (!isClubAdmin || !selectedTournament || !match.playerTwoSignupId || match.winnerSignupId !== null || activeTournamentMatch) return
+  async function startTournamentMatch(match: TournamentMatch, tournamentOverride?: ClubTournament) {
+    const tournament = tournamentOverride ?? selectedTournament
+    if (!isClubAdmin || !tournament || !match.playerTwoSignupId || match.winnerSignupId !== null || activeTournamentMatch) return
     if (match.inProgress) {
       restoreTournamentMatch(match)
       return
     }
-    if (selectedTournament.matches.some((item) => item.inProgress && !item.inProgress.courtNumber)) {
-      showTournamentError('Tildel bane til alle pågående kamper før du starter en ny kamp.')
+    if (tournament.matches.some((item) => item.inProgress && !item.inProgress.courtNumber)) {
+      const errorMessage = 'Tildel bane til alle pågående kamper før du starter en ny kamp.'
+      showTournamentError(errorMessage)
+      if (tournamentOverride) setTournamentMatchMessage(errorMessage)
       return
     }
-    const occupiedCourts = new Set(selectedTournament.matches.flatMap((item) => item.inProgress?.courtNumber ? [item.inProgress.courtNumber] : []))
+    const occupiedCourts = new Set(tournament.matches.flatMap((item) => item.inProgress?.courtNumber ? [item.inProgress.courtNumber] : []))
     const availableCourts = ([1, 2, 3, 4, 5] as const).filter((court) => !occupiedCourts.has(court))
     const assignedCourt = availableCourts.includes(courtNumber) ? courtNumber : availableCourts[0]
     if (!assignedCourt) {
-      showTournamentError('Alle fem banene er i bruk. Vent til en kamp er ferdig.')
+      const errorMessage = 'Alle fem banene er i bruk. Vent til en kamp er ferdig.'
+      showTournamentError(errorMessage)
+      if (tournamentOverride) setTournamentMatchMessage(errorMessage)
       return
     }
-    const participantOne = selectedTournament.participants.find((participant) => participant.signupId === match.playerOneSignupId)
-    const participantTwo = selectedTournament.participants.find((participant) => participant.signupId === match.playerTwoSignupId)
+    const participantOne = tournament.participants.find((participant) => participant.signupId === match.playerOneSignupId)
+    const participantTwo = tournament.participants.find((participant) => participant.signupId === match.playerTwoSignupId)
     if (!participantOne || !participantTwo) {
-      showTournamentError('Spillerne i denne turneringskampen ble ikke funnet.')
+      const errorMessage = 'Spillerne i denne turneringskampen ble ikke funnet.'
+      showTournamentError(errorMessage)
+      if (tournamentOverride) setTournamentMatchMessage(errorMessage)
       return
     }
     const playerOneId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-1`
@@ -2102,7 +2142,7 @@ function App() {
       { id: playerTwoId, name: participantTwo.playerName, score: 501, visits: [] },
     ]
     const activeMatch = {
-      eventDate: selectedTournament.eventDate,
+      eventDate: tournament.eventDate,
       matchId: match.id,
       playerOneId,
       playerTwoId,
@@ -2111,6 +2151,7 @@ function App() {
     const initialProgress: TournamentMatchProgress = {
       progressId: activeMatch.progressId,
       courtNumber: assignedCourt,
+      refereeSignupId: getTournamentMatchRefereeSignupId(tournament, match) ?? undefined,
       players: matchPlayers,
       activePlayer: 0,
       legsWon: { [playerOneId]: 0, [playerTwoId]: 0 },
@@ -2128,18 +2169,22 @@ function App() {
     try {
       await persistTournamentMatchProgress(activeMatch, initialProgress)
     } catch (error) {
-      showTournamentError(`Kampen kunne ikke startes fordi stillingen ikke ble lagret: ${tournamentErrorMessage(error, 'Ukjent lagringsfeil.')}`)
+      const errorMessage = `Kampen kunne ikke startes fordi stillingen ikke ble lagret: ${tournamentErrorMessage(error, 'Ukjent lagringsfeil.')}`
+      showTournamentError(errorMessage)
+      if (tournamentOverride) setTournamentMatchMessage(errorMessage)
       return
     } finally {
       setTournamentBusy(false)
     }
     setActiveTournamentMatch({
-      eventDate: selectedTournament.eventDate,
+      eventDate: tournament.eventDate,
       matchId: match.id,
       playerOneId,
       playerTwoId,
       progressId: activeMatch.progressId,
     })
+    setSavedTournamentResultDate(null)
+    setTournamentDate(tournament.eventDate)
     setTournamentMatchMessage('')
     setPlayers(matchPlayers)
     setPlayerNames(matchPlayers.map((player) => player.name))
@@ -2171,6 +2216,20 @@ function App() {
     void savePlayers(matchPlayers.map((player) => player.name)).then(() => loadSavedData()).then(setSavedData).catch(() => {
       setDatabaseMessage('Turneringskampen startet, men spillerne kunne ikke lagres i spillerlisten.')
     })
+  }
+
+  function goToNextTournamentMatch() {
+    if (!savedTournament) {
+      setAppSection('tournament')
+      return
+    }
+    setTournamentDate(savedTournament.eventDate)
+    if (savedTournamentNextMatch) {
+      setTournamentMatchMessage('Klargjør neste turneringskamp …')
+      void startTournamentMatch(savedTournamentNextMatch, savedTournament)
+      return
+    }
+    setAppSection('tournament')
   }
 
   function retryTournamentMatchSave() {
@@ -2684,10 +2743,10 @@ function App() {
             <div><p className="eyebrow">{matchWinnerId ? <>KAMPEN ER AVGJORT <span className="heading-slash">/</span> BEST AV {bestOfLegs}</> : <>KAMPROM / 01 <span className="heading-slash">/</span> {roundWord} {String(legNumber).padStart(2, '0')} <span className="heading-slash">/</span> BEST AV {bestOfLegs}</>}</p><h1>{gameMode === 'cricket' ? 'Cricket' : gameMode}<span className="title-period">.</span></h1></div>
             <div className="game-actions">
               <button className="text-button" type="button" disabled={!history.length || matchWinnerId !== null} onClick={undoVisit}><span aria-hidden="true">↶</span> Angre</button>
-              <button className="text-button new-game-button" type="button" disabled={Boolean(activeTournamentMatch && matchWinnerId)} onClick={newGame}>Ny kamp <span aria-hidden="true">↗</span></button>
+              {!savedTournamentResultDate && <button className="text-button new-game-button" type="button" disabled={Boolean(activeTournamentMatch && matchWinnerId)} onClick={newGame}>Ny kamp <span aria-hidden="true">↗</span></button>}
             </div>
           </div>
-          {activeTournamentMatch && <div className={`tournament-resume-status${tournamentMatchMessage.includes('ikke') ? ' is-error' : ''}`} role={tournamentMatchMessage.includes('ikke') ? 'alert' : 'status'}><span>{tournamentMatchMessage || 'Turneringskampen lagres automatisk, så den kan fortsettes senere.'}</span>{tournamentMatchMessage.includes('gjenopptakelse') && !matchWinnerId && <button className="text-button" type="button" onClick={retryTournamentProgressSave}>Prøv lagring på nytt</button>}</div>}
+          {activeTournamentMatch && <div className={`tournament-resume-status${tournamentMatchMessage.includes('ikke') ? ' is-error' : ''}`} role={tournamentMatchMessage.includes('ikke') ? 'alert' : 'status'}><span>{tournamentMatchMessage || 'Turneringskampen lagres automatisk, så den kan fortsettes senere.'}{activeTournamentRefereeName && <strong>Dommer: {activeTournamentRefereeName}</strong>}</span>{tournamentMatchMessage.includes('gjenopptakelse') && !matchWinnerId && <button className="text-button" type="button" onClick={retryTournamentProgressSave}>Prøv lagring på nytt</button>}</div>}
           {gameMode === '501' && dartLimitBullOff && !winnerId && <div className="bull-trigger" role="alert"><div><span>42 PILER HVER BRUKT</span><strong>Leggen er ikke avgjort. Kast mot bull, og trykk på navnet til den som kom nærmest.</strong></div></div>}
           <div className={`player-grid players-${players.length}`}>
             {players.map((player, index) => {
@@ -2716,7 +2775,7 @@ function App() {
             })}
           </div>
           {winner ? (
-            <div className="winner-banner" role="status"><div><p className="eyebrow">{matchWinnerId ? 'KAMPEN ER AVGJORT' : `${roundWord} ${legNumber - 1} ER FERDIG`}</p><h2>{matchWinnerId ? `${winnerDisplayName} vant kampen.` : `${winnerDisplayName} vant ${roundWordLower}en.`}</h2><p className="match-scoreline">{scorePlayers.map((player) => `${teamMode ? `Lag ${player.teamId} (${teamMembers(players, player).map((member) => member.name).join(' + ')})` : player.name} ${legsWon[player.id] ?? 0}`).join('  ·  ')} <span>BEST AV {bestOfLegs}</span></p>{matchWinnerId && emailReportMessage && <p className="email-report-status" role="status">{emailReportMessage}</p>}{matchWinnerId && tournamentMatchMessage && <p className="email-report-status" role={activeTournamentMatch ? 'alert' : 'status'}>{tournamentMatchMessage}</p>}{matchWinnerId && activeTournamentMatch && <button className="text-button" type="button" disabled={tournamentBusy} onClick={retryTournamentMatchSave}>Prøv å lagre turneringsresultatet på nytt</button>}</div><button className="primary-button" type="button" disabled={Boolean(activeTournamentMatch && matchWinnerId)} onClick={matchWinnerId ? newGame : startNextLeg}>{matchWinnerId ? activeTournamentMatch ? 'Lagre resultatet først' : 'Ny kamp' : `Neste ${roundWordLower}`} <span aria-hidden="true">↗</span></button></div>
+            <div className="winner-banner" role="status"><div><p className="eyebrow">{matchWinnerId ? 'KAMPEN ER AVGJORT' : `${roundWord} ${legNumber - 1} ER FERDIG`}</p><h2>{matchWinnerId ? `${winnerDisplayName} vant kampen.` : `${winnerDisplayName} vant ${roundWordLower}en.`}</h2><p className="match-scoreline">{scorePlayers.map((player) => `${teamMode ? `Lag ${player.teamId} (${teamMembers(players, player).map((member) => member.name).join(' + ')})` : player.name} ${legsWon[player.id] ?? 0}`).join('  ·  ')} <span>BEST AV {bestOfLegs}</span></p>{matchWinnerId && emailReportMessage && <p className="email-report-status" role="status">{emailReportMessage}</p>}{matchWinnerId && tournamentMatchMessage && <p className="email-report-status" role={activeTournamentMatch ? 'alert' : 'status'}>{tournamentMatchMessage}</p>}{matchWinnerId && activeTournamentMatch && <button className="text-button" type="button" disabled={tournamentBusy} onClick={retryTournamentMatchSave}>Prøv å lagre turneringsresultatet på nytt</button>}</div><button className="primary-button" type="button" disabled={Boolean(activeTournamentMatch && matchWinnerId) || Boolean(savedTournamentResultDate && tournamentBusy)} onClick={matchWinnerId ? savedTournamentResultDate ? goToNextTournamentMatch : newGame : startNextLeg}>{matchWinnerId ? activeTournamentMatch ? 'Lagre resultatet først' : savedTournamentResultDate ? savedTournamentNextMatch ? 'Klar til neste kamp' : 'Til turneringen' : 'Ny kamp' : `Neste ${roundWordLower}`} <span aria-hidden="true">↗</span></button></div>
           ) : (
             <form className="score-entry" onSubmit={recordVisit}>
               <div className="entry-title"><div><p className="eyebrow">{gameMode === 'cricket' ? 'REGISTRER TREFF' : 'REGISTRER POENG'}</p><h2>{currentPlayer?.name}<span> sin tur</span></h2></div><span className="dart-counter">{entryMode === 'total' && gameMode !== 'cricket' ? 'TOTALSUM' : '3 KAST'}</span></div>
