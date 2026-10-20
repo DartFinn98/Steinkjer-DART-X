@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { getCheckoutHint } from './checkout'
-import { addTournamentCupRound, beginGuestSession, deleteAllClubTournaments, deleteClubDocument, deleteClubSignup, deleteClubTournament, deleteSavedMatch, deleteSavedPlayer, downloadClubDocument, endGuestSession, finishTournamentMatch, getGuestDisplayName, loadClubAdminStatus, loadClubAdmins, loadClubDocuments, loadClubSignups, loadClubTournaments, loadLinkedPlayerProfile, loadRegisteredPlayerNames, loadSavedData, saveClubSignup, saveClubTournament, saveFinishedMatch, saveLinkedPlayerId, savePlayers, saveTournamentMatchProgress, sendMatchReport, setClubAdminRole, syncPendingChanges, updateClubSignup, updateTournamentParticipantAvailability, uploadClubDocument, uploadProfileAvatar } from './database'
+import { addAdminGuestSignup, addTournamentCupRound, beginGuestSession, deleteAllClubTournaments, deleteClubDocument, deleteClubSignup, deleteClubTournament, deleteSavedMatch, deleteSavedPlayer, downloadClubDocument, endGuestSession, finishTournamentMatch, getGuestDisplayName, loadClubAdminStatus, loadClubAdmins, loadClubDocuments, loadClubSignups, loadClubTournaments, loadLinkedPlayerProfile, loadRegisteredPlayerNames, loadSavedData, saveClubSignup, saveClubTournament, saveFinishedMatch, saveLinkedPlayerId, savePlayers, saveTournamentMatchProgress, sendMatchReport, setClubAdminRole, syncPendingChanges, updateClubSignup, updateTournamentParticipantAvailability, uploadClubDocument, uploadProfileAvatar } from './database'
 import type { ClubAdmin, ClubDocument, ClubSignup, ClubTournament, PendingSyncIssue, SavedData, TournamentGameHistory, TournamentMatch, TournamentMatchProgress, TournamentGamePlayer } from './database'
 import { supabase } from './supabase'
 import type { Session } from '@supabase/supabase-js'
@@ -773,6 +773,8 @@ function App() {
   const [adminPendingDeleteId, setAdminPendingDeleteId] = useState<string | null>(null)
   const [adminEditDate, setAdminEditDate] = useState('')
   const [adminEditName, setAdminEditName] = useState('')
+  const [adminGuestSignupDate, setAdminGuestSignupDate] = useState(() => getUpcomingClubDates()[0] ?? '')
+  const [adminGuestSignupName, setAdminGuestSignupName] = useState('')
   const [adminExportDate, setAdminExportDate] = useState('all')
   const [adminDocuments, setAdminDocuments] = useState<ClubDocument[]>([])
   const [adminDocumentsLoading, setAdminDocumentsLoading] = useState(false)
@@ -1840,6 +1842,23 @@ function App() {
     setMessage('')
   }
 
+  async function addAdminGuestClubSignup() {
+    if (adminSignupsBusy) return
+    const guestName = adminGuestSignupName.trim().replace(/\s+/g, ' ')
+    setAdminSignupsBusy(true)
+    setAdminMessage('')
+    try {
+      await addAdminGuestSignup(adminGuestSignupDate, guestName)
+      setClubSignups(await loadClubSignups())
+      setAdminGuestSignupName('')
+      setAdminMessage(`${guestName} er lagt til på klubbkvelden.`)
+    } catch (error) {
+      setAdminMessage(error instanceof Error ? error.message : 'Gjestepåmeldingen kunne ikke legges til.')
+    } finally {
+      setAdminSignupsBusy(false)
+    }
+  }
+
   async function saveAdminSignup(signupId: string) {
     setAdminSignupsBusy(true)
     setAdminMessage('')
@@ -2552,12 +2571,18 @@ function App() {
               <label className="admin-export-select"><span>LAST NED</span><select value={adminExportDate} onChange={(event) => setAdminExportDate(event.target.value)}><option value="all">Alle kommende kvelder</option>{adminEventDates.map((date) => <option key={date} value={date}>{formatClubDate(date)}</option>)}</select></label>
               <button className="primary-button admin-export-button" type="button" disabled={adminExportSignups.length === 0} onClick={() => downloadClubSignupCsv(adminExportSignups, adminExportDate === 'all' ? 'alle' : adminExportDate)}>Last ned CSV</button>
             </div>
+            <form className="admin-guest-signup-form" onSubmit={(event) => { event.preventDefault(); void addAdminGuestClubSignup() }}>
+              <div><p className="eyebrow">MANUELL PÅMELDING</p><p>Legg til en spiller som ikke har registrert konto.</p></div>
+              <label><span>KLUBBKVELD</span><select required value={adminGuestSignupDate} onChange={(event) => setAdminGuestSignupDate(event.target.value)}>{adminEventDates.map((date) => <option key={date} value={date}>{formatClubDate(date)}</option>)}</select></label>
+              <label><span>SPILLERNAVN</span><input autoComplete="off" maxLength={24} required value={adminGuestSignupName} onChange={(event) => setAdminGuestSignupName(event.target.value)} placeholder="Skriv inn navn" /></label>
+              <button className="primary-button" type="submit" disabled={adminSignupsBusy || !adminGuestSignupName.trim() || !adminGuestSignupDate}>{adminSignupsBusy ? 'MELDER PÅ …' : 'Legg til påmelding'}</button>
+            </form>
             {adminMessage && <p className="admin-message" role="status">{adminMessage}</p>}
-            {adminUpcomingSignups.length === 0 ? <p className="admin-empty">Ingen kommende påmeldinger ennå.</p> : adminEventDates.filter((date) => adminUpcomingSignups.some((signup) => signup.eventDate === date)).map((date) => {
+            {adminEventDates.length === 0 ? <p className="admin-empty">Ingen kommende klubbkvelder.</p> : adminEventDates.map((date) => {
               const attendees = adminUpcomingSignups.filter((signup) => signup.eventDate === date)
               return <section className="admin-event" key={date}>
                 <h3>{formatClubDate(date)} <span>{attendees.length} {attendees.length === 1 ? 'påmeldt' : 'påmeldte'}</span></h3>
-                <ul className="admin-signup-list">{attendees.map((signup) => {
+                {attendees.length > 0 ? <ul className="admin-signup-list">{attendees.map((signup) => {
                   const isEditing = adminEditingSignupId === signup.id
                   const isConfirmingDelete = adminPendingDeleteId === signup.id
                   return <li key={signup.id}>
@@ -2566,11 +2591,11 @@ function App() {
                       <label><span>NAVN</span><input autoFocus required maxLength={24} value={adminEditName} onChange={(event) => setAdminEditName(event.target.value)} /></label>
                       <div className="admin-signup-actions"><button className="primary-button" type="submit" disabled={adminSignupsBusy}>{adminSignupsBusy ? 'LAGRER …' : 'Lagre'}</button><button type="button" disabled={adminSignupsBusy} onClick={() => setAdminEditingSignupId(null)}>Avbryt</button></div>
                     </form> : <>
-                      <span className="admin-signup-name">{signup.playerName}</span>
+                      <span className="admin-signup-name">{signup.playerName}{!signup.signedUpBy && <small className="admin-guest-signup-tag">MANUELT PÅMELDT</small>}</span>
                       {isConfirmingDelete ? <div className="admin-signup-actions"><span>Fjerne påmeldingen?</span><button className="admin-delete-confirm" type="button" disabled={adminSignupsBusy} onClick={() => void removeAdminSignup(signup.id)}>Ja, slett</button><button type="button" disabled={adminSignupsBusy} onClick={() => setAdminPendingDeleteId(null)}>Avbryt</button></div> : <div className="admin-signup-actions"><button type="button" disabled={adminSignupsBusy} onClick={() => { setAdminEditingSignupId(signup.id); setAdminPendingDeleteId(null); setAdminEditDate(signup.eventDate); setAdminEditName(signup.playerName) }}>Rediger</button><button className="admin-delete-button" type="button" disabled={adminSignupsBusy} onClick={() => { setAdminPendingDeleteId(signup.id); setAdminEditingSignupId(null) }}>Slett</button></div>}
                     </>}
                   </li>
-                })}</ul>
+                })}</ul> : <p className="admin-empty">Ingen er påmeldt ennå. Legg til en gjest ovenfor ved behov.</p>}
               </section>
             })}
           </section>

@@ -83,9 +83,9 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .admin-section-heading { display: grid; grid-template-columns: minmax(0, 1fr) minmax(210px, 290px) auto; align-items: end; gap: 12px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
 .admin-section-heading h2, .admin-roles-panel h2 { margin: 0; font-family: var(--serif); font-size: 27px; font-weight: 500; }
 .admin-section-heading .eyebrow, .admin-roles-panel .eyebrow { margin: 0 0 5px; }
-.admin-export-select, .admin-role-form label, .admin-signup-edit label { display: grid; gap: 6px; min-width: 0; }
-.admin-export-select > span, .admin-role-form label > span, .admin-signup-edit label > span { color: var(--muted); font: 9px var(--mono); letter-spacing: .8px; }
-.admin-export-select select, .admin-role-form input, .admin-signup-edit input, .admin-signup-edit select { width: 100%; min-width: 0; min-height: 40px; padding: 0 9px; border: 1px solid var(--line); border-radius: 0; background: #fffefa; color: var(--ink); font-size: 12px; }
+.admin-export-select, .admin-role-form label, .admin-signup-edit label, .admin-guest-signup-form label { display: grid; gap: 6px; min-width: 0; }
+.admin-export-select > span, .admin-role-form label > span, .admin-signup-edit label > span, .admin-guest-signup-form label > span { color: var(--muted); font: 9px var(--mono); letter-spacing: .8px; }
+.admin-export-select select, .admin-role-form input, .admin-signup-edit input, .admin-signup-edit select, .admin-guest-signup-form input, .admin-guest-signup-form select { width: 100%; min-width: 0; min-height: 40px; padding: 0 9px; border: 1px solid var(--line); border-radius: 0; background: #fffefa; color: var(--ink); font-size: 12px; }
 .admin-export-button { min-height: 40px; white-space: nowrap; }
 .admin-export-button:disabled, .admin-signup-actions button:disabled, .admin-role-form button:disabled, .admin-list button:disabled { cursor: not-allowed; opacity: .55; }
 .admin-message { margin: 13px 0 0; color: var(--green); font-size: 12px; line-height: 1.5; }
@@ -95,9 +95,14 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .admin-event + .admin-event { margin-top: 15px; border-top: 1px solid var(--line); }
 .admin-event h3 { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 0 7px; font-size: 14px; }
 .admin-event h3 span { color: var(--green); font: 10px var(--mono); white-space: nowrap; }
+.admin-guest-signup-form { display: grid; grid-template-columns: minmax(170px, 1fr) minmax(170px, .8fr) minmax(170px, 1fr) auto; align-items: end; gap: 10px; padding: 15px 0; border-bottom: 1px solid var(--line); }
+.admin-guest-signup-form > div .eyebrow { margin: 0 0 5px; }
+.admin-guest-signup-form > div > p:last-child { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.admin-guest-signup-form .primary-button { min-height: 40px; white-space: nowrap; }
 .admin-signup-list, .admin-list { display: grid; margin: 0; padding: 0; list-style: none; }
 .admin-signup-list > li, .admin-list > li { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 43px; padding: 7px 0; border-top: 1px solid #d9d7ce80; font-size: 12px; }
 .admin-signup-name, .admin-list > li > span { min-width: 0; overflow-wrap: anywhere; }
+.admin-guest-signup-tag { display: inline-block; margin-left: 8px; color: var(--orange); font: 8px var(--mono); letter-spacing: .5px; }
 .admin-signup-actions { display: flex; flex: none; align-items: center; justify-content: flex-end; gap: 7px; }
 .admin-signup-actions button, .admin-list button { min-height: 31px; padding: 0 9px; border: 1px solid var(--line); background: transparent; color: var(--green); font-size: 11px; font-weight: 700; cursor: pointer; }
 .admin-signup-actions button:hover, .admin-list button:hover { border-color: var(--green); }
@@ -570,6 +575,8 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
   .tournament-board-select, .tournament-board-select select { width: 100%; }
   .admin-signup-edit { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .admin-signup-edit .admin-signup-actions { grid-column: 1 / -1; }
+  .admin-guest-signup-form { grid-template-columns: minmax(0, 1fr); }
+  .admin-guest-signup-form .primary-button { width: 100%; }
   .admin-document-list > li { align-items: flex-start; flex-direction: column; }
   .admin-document-list .admin-signup-actions { width: 100%; justify-content: flex-start; }
   .player-profile-page { grid-template-columns: minmax(0, 1fr); gap: 24px; min-height: auto; padding: 40px 0 55px; }

@@ -447,7 +447,7 @@ export async function loadClubSignups(): Promise<ClubSignup[]> {
     id: signup.id,
     eventDate: signup.event_date,
     playerName: signup.player_name,
-    signedUpBy: signup.signed_up_by,
+    ...(signup.signed_up_by ? { signedUpBy: signup.signed_up_by } : {}),
     signedUpAt: signup.signed_up_at,
   }))
   await cacheClubSignups(signups)
@@ -503,6 +503,40 @@ export async function deleteClubSignup(signupId: string): Promise<void> {
   await cacheClubSignups(signups.filter((signup) => signup.id !== signupId))
 }
 
+export async function addAdminGuestSignup(eventDate: string, playerName: string): Promise<void> {
+  if (!supabase) throw new Error('Supabase er ikke konfigurert.')
+  if (!navigator.onLine) throw new Error('Du må være på nett for å legge til en gjestepåmelding.')
+  const normalizedName = playerName.trim().replace(/\s+/g, ' ')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate) || normalizedName.length < 1 || normalizedName.length > 24) {
+    throw new Error('Velg en klubbkveld og skriv inn et navn på 1–24 tegn.')
+  }
+
+  const { data, error } = await supabase.rpc('add_admin_guest_club_signup', {
+    target_event_date: eventDate,
+    target_player_name: normalizedName,
+  })
+  if (error) throw error
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('Supabase returnerte ikke den nye gjestepåmeldingen.')
+  }
+  const signupRow = data as {
+    id: string
+    event_date: string
+    player_name: string
+    signed_up_by: string | null
+    signed_up_at: string
+  }
+  const signup: ClubSignup = {
+    id: signupRow.id,
+    eventDate: signupRow.event_date,
+    playerName: signupRow.player_name,
+    ...(signupRow.signed_up_by ? { signedUpBy: signupRow.signed_up_by } : {}),
+    signedUpAt: signupRow.signed_up_at,
+  }
+  const signups = await loadLocalClubSignups()
+  await cacheClubSignups([...signups.filter((item) => item.id !== signup.id), signup])
+}
+
 export async function updateClubSignup(signupId: string, eventDate: string, playerName: string): Promise<void> {
   if (!supabase) throw new Error('Supabase er ikke konfigurert.')
   if (!navigator.onLine) throw new Error('Du må være på nett for å endre en påmelding.')
@@ -522,7 +556,7 @@ export async function updateClubSignup(signupId: string, eventDate: string, play
     id: data.id,
     eventDate: data.event_date,
     playerName: data.player_name,
-    signedUpBy: data.signed_up_by,
+    ...(data.signed_up_by ? { signedUpBy: data.signed_up_by } : {}),
     signedUpAt: data.signed_up_at,
   }
   const signups = await loadLocalClubSignups()

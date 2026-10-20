@@ -25,6 +25,9 @@ create table if not exists public.club_signups (
   unique (event_date, signed_up_by)
 );
 
+alter table public.club_signups
+  alter column signed_up_by drop not null;
+
 create table if not exists public.club_tournaments (
   event_date date primary key,
   participants jsonb not null default '[]'::jsonb check (jsonb_typeof(participants) = 'array'),
@@ -313,6 +316,47 @@ create policy "Club admins can manage all club signups"
   with check ((select public.is_club_admin()));
 
 grant select, insert, update, delete on public.club_signups to authenticated;
+
+create or replace function public.add_admin_guest_club_signup(
+  target_event_date date,
+  target_player_name text
+)
+returns public.club_signups
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  normalized_name text;
+  created_signup public.club_signups%rowtype;
+begin
+  if not public.is_club_admin() then
+    raise exception 'Administrator access required' using errcode = '42501';
+  end if;
+
+  normalized_name := regexp_replace(trim(coalesce(target_player_name, '')), '\s+', ' ', 'g');
+  if target_event_date is null or char_length(normalized_name) < 1 or char_length(normalized_name) > 24 then
+    raise exception 'Velg en klubbkveld og skriv inn et navn på 1–24 tegn.';
+  end if;
+
+  if exists (
+    select 1
+    from public.club_signups
+    where event_date = target_event_date
+      and lower(regexp_replace(trim(player_name), '\s+', ' ', 'g')) = lower(normalized_name)
+  ) then
+    raise exception 'En spiller med dette navnet er allerede påmeldt denne klubbkvelden.';
+  end if;
+
+  insert into public.club_signups (id, event_date, player_name, signed_up_by)
+  values (gen_random_uuid()::text, target_event_date, normalized_name, null)
+  returning * into created_signup;
+
+  return created_signup;
+end;
+$$;
+
+revoke all on function public.add_admin_guest_club_signup(date, text) from public;
+grant execute on function public.add_admin_guest_club_signup(date, text) to authenticated;
 
 drop policy if exists "Signed-in members can view club tournaments" on public.club_tournaments;
 create policy "Signed-in members can view club tournaments"
