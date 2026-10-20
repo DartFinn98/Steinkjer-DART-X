@@ -57,6 +57,7 @@ export function drawClubPools(
     seed: seedRanks.get(signup.id) ?? null,
     poolNumber: null,
     advances: false,
+    availability: 'not-arrived',
   }))
   const pools = poolSizes.map((): TournamentParticipant[] => [])
   const seeded = participants.filter((participant) => participant.seed !== null)

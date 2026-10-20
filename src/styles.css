@@ -149,6 +149,23 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .tournament-board-select > span { color: var(--muted); font: 8px var(--mono); }
 .tournament-board-select select { min-height: 34px; border: 1px solid var(--line); border-radius: 0; background: #fffefa; color: var(--ink); font-size: 11px; }
 .tournament-day-queue { display: grid; gap: 7px; padding-top: 10px; border-top: 1px solid var(--line); }
+.tournament-queue-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tournament-queue-heading > span { color: var(--muted); font: 8px var(--mono); letter-spacing: .4px; text-align: right; }
+.tournament-checkin-note { margin: -2px 0 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.tournament-readiness-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
+.tournament-readiness-list > li { display: flex; align-items: center; justify-content: space-between; gap: 7px; min-width: 0; padding: 7px 8px; border: 1px solid #d9d7ce; }
+.tournament-readiness-list > li > span { display: grid; min-width: 0; gap: 3px; }
+.tournament-readiness-list strong { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.tournament-readiness-list small { color: var(--muted); font: 8px var(--mono); }
+.tournament-readiness-actions { display: flex; flex: none; gap: 3px; }
+.tournament-readiness-actions button { min-height: 29px; padding: 0 7px; border: 1px solid var(--line); background: transparent; color: var(--ink); font-size: 9px; cursor: pointer; }
+.tournament-readiness-actions button[aria-pressed="true"] { border-color: var(--green); background: #175c4510; color: var(--green); font-weight: 700; }
+.tournament-readiness-actions button:disabled { cursor: default; opacity: .55; }
+.tournament-recommendation { display: grid; gap: 5px; padding: 12px; border: 1px solid #175c4540; background: #175c4508; }
+.tournament-recommendation-label { color: var(--green); font: 8px var(--mono); letter-spacing: .6px; }
+.tournament-recommendation strong { font-size: 13px; }
+.tournament-recommendation > span:nth-of-type(2), .tournament-recommendation small { color: var(--muted); font-size: 10px; line-height: 1.5; }
+.tournament-recommendation small { font-size: 9px; }
 .tournament-day-queue h4 { margin: 0; }
 .tournament-day-queue li > span { min-width: 0; font-size: 10px; line-height: 1.4; overflow-wrap: anywhere; }
 .tournament-day-queue li > span small { display: block; margin-top: 4px; color: var(--green); font: 8px var(--mono); }
@@ -181,6 +198,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .tournament-match-info small { grid-column: 1 / -1; color: var(--muted); font: 8px var(--mono); }
 .tournament-match-info .tournament-referee { color: var(--green); }
 .tournament-play-button { flex: none; min-height: 36px; padding: 0 12px; border: 1px solid var(--green); background: var(--green); color: #fff; font-size: 10px; font-weight: 700; cursor: pointer; }
+.tournament-play-button.is-recommended { box-shadow: 0 0 0 2px #175c4520; }
 .tournament-play-button:disabled { cursor: wait; opacity: .6; }
 .tournament-match-result { max-width: 45%; color: var(--green); font-size: 11px; text-align: right; overflow-wrap: anywhere; }
 .tournament-match-pending { color: var(--muted); font-size: 10px; }

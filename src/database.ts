@@ -44,6 +44,8 @@ export type TournamentParticipant = {
   seed: number | null
   poolNumber: number | null
   advances: boolean
+  availability?: 'not-arrived' | 'ready' | 'pause'
+  readySince?: string
 }
 
 export type TournamentGamePlayer = {

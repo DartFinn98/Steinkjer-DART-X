@@ -98,6 +98,7 @@ type TournamentBoardProps = {
   onSeedChange: (signupId: string, rank: string) => void
   onDraw: () => void
   onPlayMatch: (match: TournamentMatch) => void
+  onReadinessChange: (signupId: string, availability: 'not-arrived' | 'ready' | 'pause') => void
   onToggleAdvancement: (signupId: string, advances: boolean) => void
   onCreateCup: () => void
   pendingDeleteDate: string | null
@@ -129,6 +130,7 @@ function TournamentBoard({
   onSeedChange,
   onDraw,
   onPlayMatch,
+  onReadinessChange,
   onToggleAdvancement,
   onCreateCup,
   pendingDeleteDate,
@@ -141,6 +143,11 @@ function TournamentBoard({
   onCancelDelete,
   onDeleteAll,
 }: TournamentBoardProps) {
+  const [timeNow, setTimeNow] = useState(Date.now())
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setTimeNow(Date.now()), 60_000)
+    return () => window.clearInterval(intervalId)
+  }, [])
   const seedOptions = Array.from({ length: signups.length }, (_, index) => String(index + 1))
   const tournamentPools = tournament
     ? Array.from(new Set(tournament.participants.flatMap((participant) => participant.poolNumber === null ? [] : [participant.poolNumber]))).sort((first, second) => first - second)
@@ -165,14 +172,68 @@ function TournamentBoard({
   const getRoundLabel = (round: number, matchesInRound: number) => matchesInRound === 1
     ? 'Finale'
     : matchesInRound === 2 ? 'Semifinale' : `Cup · runde ${round}`
+  const currentRoundMatches = tournament?.cupRound
+    ? cupMatches.filter((match) => match.roundNumber === tournament.cupRound)
+    : poolMatches
+  const activeSignupIds = new Set(activeMatches.flatMap((match) => [match.playerOneSignupId, match.playerTwoSignupId].filter((id): id is string => id !== null)))
+  const matchesPlayed = new Map<string, number>()
+  const participantById = new Map((tournament?.participants ?? []).map((participant) => [participant.signupId, participant]))
+  for (const match of currentRoundMatches) {
+    if ((!match.winnerSignupId && !match.inProgress) || !match.playerTwoSignupId) continue
+    matchesPlayed.set(match.playerOneSignupId, (matchesPlayed.get(match.playerOneSignupId) ?? 0) + 1)
+    if (match.playerTwoSignupId) {
+      matchesPlayed.set(match.playerTwoSignupId, (matchesPlayed.get(match.playerTwoSignupId) ?? 0) + 1)
+    }
+  }
   const queuedMatches = (tournament?.cupRound
     ? cupMatches.filter((match) => match.roundNumber === tournament.cupRound)
     : poolMatches)
     .filter((match) => match.winnerSignupId === null && !match.inProgress && match.playerTwoSignupId !== null)
-    .sort((first, second) => first.poolNumber !== second.poolNumber
-      ? (first.poolNumber ?? 0) - (second.poolNumber ?? 0)
-      : first.bracketPosition - second.bracketPosition)
+    .sort((first, second) => {
+      const firstParticipants = [participantById.get(first.playerOneSignupId), participantById.get(first.playerTwoSignupId!)]
+      const secondParticipants = [participantById.get(second.playerOneSignupId), participantById.get(second.playerTwoSignupId!)]
+      const firstReady = firstParticipants.every((participant) => (participant?.availability ?? 'ready') === 'ready')
+        && !activeSignupIds.has(first.playerOneSignupId) && !activeSignupIds.has(first.playerTwoSignupId!)
+      const secondReady = secondParticipants.every((participant) => (participant?.availability ?? 'ready') === 'ready')
+        && !activeSignupIds.has(second.playerOneSignupId) && !activeSignupIds.has(second.playerTwoSignupId!)
+      if (firstReady !== secondReady) return firstReady ? -1 : 1
+      const readyTimestamp = (participant: typeof firstParticipants[number]) => Date.parse(participant?.readySince ?? tournament?.createdAt ?? '')
+      const firstWaitStart = Math.max(...firstParticipants.map(readyTimestamp))
+      const secondWaitStart = Math.max(...secondParticipants.map(readyTimestamp))
+      if (Number.isFinite(firstWaitStart) && Number.isFinite(secondWaitStart) && firstWaitStart !== secondWaitStart) {
+        return firstWaitStart - secondWaitStart
+      }
+      const firstLoads = [matchesPlayed.get(first.playerOneSignupId) ?? 0, matchesPlayed.get(first.playerTwoSignupId!) ?? 0]
+      const secondLoads = [matchesPlayed.get(second.playerOneSignupId) ?? 0, matchesPlayed.get(second.playerTwoSignupId!) ?? 0]
+      return Math.max(...firstLoads) - Math.max(...secondLoads)
+        || firstLoads.reduce((total, count) => total + count, 0) - secondLoads.reduce((total, count) => total + count, 0)
+        || (first.poolNumber ?? 0) - (second.poolNumber ?? 0)
+        || first.bracketPosition - second.bracketPosition
+    })
     .slice(0, 5)
+  const recommendedMatch = queuedMatches.find((match) => {
+    const first = participantById.get(match.playerOneSignupId)
+    const second = participantById.get(match.playerTwoSignupId!)
+    return (first?.availability ?? 'ready') === 'ready'
+      && (second?.availability ?? 'ready') === 'ready'
+      && !activeSignupIds.has(match.playerOneSignupId)
+      && !activeSignupIds.has(match.playerTwoSignupId!)
+  })
+  const formatWaitTime = (readySince: string | undefined) => {
+    const parsedTime = Date.parse(readySince ?? tournament?.createdAt ?? '')
+    if (!Number.isFinite(parsedTime)) return 'Klar'
+    const minutes = Math.max(0, Math.floor((timeNow - parsedTime) / 60_000))
+    if (minutes < 1) return 'Klar nå'
+    if (minutes < 60) return `Klar i ${minutes} min`
+    return `Klar i ${Math.floor(minutes / 60)} t ${minutes % 60} min`
+  }
+  const getMatchWaitTime = (match: TournamentMatch) => {
+    const fallbackTime = tournament?.createdAt ?? new Date().toISOString()
+    const waitStarts = [match.playerOneSignupId, match.playerTwoSignupId]
+      .map((signupId) => Date.parse(participantById.get(signupId ?? '')?.readySince ?? fallbackTime))
+      .filter(Number.isFinite)
+    return formatWaitTime(new Date(Math.max(...waitStarts)).toISOString())
+  }
   const canStartQueuedMatches = canPlayMatch && unassignedActiveMatches.length === 0
 
   return <section className="admin-panel tournament-panel">
@@ -229,18 +290,48 @@ function TournamentBoard({
           </li>
         })}</ul>}
         <div className="tournament-day-queue">
-          <h4>Neste kamper</h4>
+          <div className="tournament-queue-heading"><h4>Smart kampflyt</h4><span>JEVN PAUSE · DU VELGER</span></div>
+          <p className="tournament-checkin-note">Meld spillerne klare når de møter. Forslagene bruker bare innsjekkede spillere.</p>
+          <ul className="tournament-readiness-list" aria-label="Spillerklarhet">
+            {(tournament?.participants ?? []).map((participant) => {
+              const isPlaying = activeSignupIds.has(participant.signupId)
+              const availability = participant.availability ?? 'ready'
+              return <li key={participant.signupId}>
+                <span><strong>{participant.playerName}</strong><small>{isPlaying ? 'Spiller nå' : availability === 'not-arrived' ? 'Ikke sjekket inn' : availability === 'pause' ? 'Tar pause' : formatWaitTime(participant.readySince)}</small></span>
+                {isAdmin && <div className="tournament-readiness-actions">
+                  <button type="button" disabled={busy || isPlaying || availability === 'ready'} aria-pressed={!isPlaying && availability === 'ready'} onClick={() => onReadinessChange(participant.signupId, 'ready')}>Klar</button>
+                  <button type="button" disabled={busy || isPlaying || availability === 'pause'} aria-pressed={!isPlaying && availability === 'pause'} onClick={() => onReadinessChange(participant.signupId, 'pause')}>Pause</button>
+                  <button type="button" disabled={busy || isPlaying || availability === 'not-arrived'} aria-pressed={!isPlaying && availability === 'not-arrived'} onClick={() => onReadinessChange(participant.signupId, 'not-arrived')}>Ikke møtt</button>
+                </div>}
+              </li>
+            })}
+          </ul>
+          {recommendedMatch && <div className="tournament-recommendation">
+            <span className="tournament-recommendation-label">SYSTEMETS FLYTVALG</span>
+            <strong>{participantName(recommendedMatch.playerOneSignupId)} – {participantName(recommendedMatch.playerTwoSignupId!)}</strong>
+            <span>{recommendedMatch.phase === 'pool' ? `Pulje ${recommendedMatch.poolNumber}` : getRoundLabel(recommendedMatch.roundNumber, cupMatches.filter((item) => item.roundNumber === recommendedMatch.roundNumber).length)} · Begge er klare · Har ventet minst {getMatchWaitTime(recommendedMatch)} · {Math.min(matchesPlayed.get(recommendedMatch.playerOneSignupId) ?? 0, matchesPlayed.get(recommendedMatch.playerTwoSignupId!) ?? 0)}–{Math.max(matchesPlayed.get(recommendedMatch.playerOneSignupId) ?? 0, matchesPlayed.get(recommendedMatch.playerTwoSignupId!) ?? 0)} kamper spilt</span>
+            <small>Anbefalingen tar hensyn til ventetid og kampbelastning. Du velger selv hvilken kamp som starter.</small>
+          </div>}
+          <h4>Neste kamper · velg selv</h4>
           {queuedMatches.length > 0
             ? <ol>{queuedMatches.map((match) => <li key={match.id}>
               <span>
                 {match.phase === 'pool' ? `Pulje ${match.poolNumber}` : getRoundLabel(match.roundNumber, cupMatches.filter((item) => item.roundNumber === match.roundNumber).length)} · {participantName(match.playerOneSignupId)} – {participantName(match.playerTwoSignupId!)}
+                <small>{activeSignupIds.has(match.playerOneSignupId) || activeSignupIds.has(match.playerTwoSignupId!)
+                  ? 'Spiller opptatt på en annen bane'
+                  : [participantById.get(match.playerOneSignupId), participantById.get(match.playerTwoSignupId!)].find((participant) => participant?.availability === 'not-arrived')
+                    ? `${[participantById.get(match.playerOneSignupId), participantById.get(match.playerTwoSignupId!)].find((participant) => participant?.availability === 'not-arrived')?.playerName} er ikke sjekket inn`
+                    : [participantById.get(match.playerOneSignupId), participantById.get(match.playerTwoSignupId!)].find((participant) => participant?.availability === 'pause')
+                    ? `${[participantById.get(match.playerOneSignupId), participantById.get(match.playerTwoSignupId!)].find((participant) => participant?.availability === 'pause')?.playerName} har valgt pause`
+                    : `${matchesPlayed.get(match.playerOneSignupId) ?? 0}–${matchesPlayed.get(match.playerTwoSignupId!) ?? 0} kamper spilt i runden`}</small>
                 <small>{getTournamentMatchRefereeSignupId(tournament, match)
                   ? `Dommer: ${participantName(getTournamentMatchRefereeSignupId(tournament, match)!)}`
                   : 'Dommer ikke tildelt'}</small>
               </span>
-              {isAdmin && <button className="tournament-play-button" type="button" disabled={busy || !canStartQueuedMatches || freeBoards.length === 0} onClick={() => onPlayMatch(match)}>{unassignedActiveMatches.length > 0 ? 'Tildel aktive baner først' : freeBoards.length > 0 ? `Start på bane ${freeBoards[0]}` : 'Alle baner er i bruk'}</button>}
+              {isAdmin && <button className={`tournament-play-button${recommendedMatch?.id === match.id ? ' is-recommended' : ''}`} type="button" disabled={busy || !canStartQueuedMatches || freeBoards.length === 0 || activeSignupIds.has(match.playerOneSignupId) || activeSignupIds.has(match.playerTwoSignupId!) || (participantById.get(match.playerOneSignupId)?.availability !== undefined && participantById.get(match.playerOneSignupId)?.availability !== 'ready') || (participantById.get(match.playerTwoSignupId!)?.availability !== undefined && participantById.get(match.playerTwoSignupId!)?.availability !== 'ready')} onClick={() => onPlayMatch(match)}>{unassignedActiveMatches.length > 0 ? 'Tildel aktive baner først' : activeSignupIds.has(match.playerOneSignupId) || activeSignupIds.has(match.playerTwoSignupId!) ? 'Spiller opptatt' : (participantById.get(match.playerOneSignupId)?.availability !== undefined && participantById.get(match.playerOneSignupId)?.availability !== 'ready') || (participantById.get(match.playerTwoSignupId!)?.availability !== undefined && participantById.get(match.playerTwoSignupId!)?.availability !== 'ready') ? 'Sjekk at begge er klare' : freeBoards.length > 0 ? `Start på bane ${freeBoards[0]}` : 'Alle baner er i bruk'}</button>}
             </li>)}</ol>
             : <p>{tournamentFinished ? 'Turneringen er ferdig.' : 'Ingen flere kamper venter i denne runden.'}</p>}
+          {queuedMatches.length > 0 && !recommendedMatch && <p>Ingen kamp har to ledige spillere som er markert klare akkurat nå. Oppdater spillerstatus når de er klare.</p>}
         </div>
       </section>
       {tournamentPools.map((poolNumber) => {
@@ -699,6 +790,7 @@ function App() {
   const [adminPlayersMessageIsError, setAdminPlayersMessageIsError] = useState(false)
   const [clubTournaments, setClubTournaments] = useState<ClubTournament[]>([])
   const clubTournamentsRef = useRef<ClubTournament[]>([])
+  const autoCupAttemptedRef = useRef('')
   const tournamentProgressSaveQueue = useRef<Promise<void>>(Promise.resolve())
   const [tournamentDate, setTournamentDate] = useState(() => getUpcomingClubDates()[0] ?? '')
   const [tournamentSeedRanks, setTournamentSeedRanks] = useState<Record<string, string>>({})
@@ -2310,6 +2402,25 @@ function App() {
     }))
   }
 
+  function updateTournamentReadiness(signupId: string, availability: 'not-arrived' | 'ready' | 'pause') {
+    if (!isClubAdmin || !selectedTournament || tournamentBusy) return
+    if (selectedTournament.matches.some((match) => match.inProgress
+      && (match.playerOneSignupId === signupId || match.playerTwoSignupId === signupId))) return
+    const selectedParticipant = selectedTournament.participants.find((participant) => participant.signupId === signupId)
+    if (!selectedParticipant || (selectedParticipant.availability ?? 'ready') === availability) return
+    const participants = selectedTournament.participants.map((participant) => participant.signupId !== signupId
+      ? participant
+      : {
+        ...participant,
+        availability,
+        readySince: availability === 'ready' ? new Date().toISOString() : undefined,
+      })
+    const statusMessage = availability === 'ready'
+      ? 'Spilleren er meldt inn og markert klar.'
+      : availability === 'pause' ? 'Spilleren er satt på pause.' : 'Spilleren er markert som ikke møtt.'
+    void persistTournament({ ...selectedTournament, participants }, statusMessage)
+  }
+
   async function createTournamentCup() {
     if (!isClubAdmin || !selectedTournament) return
     try {
@@ -2319,6 +2430,20 @@ function App() {
       showTournamentError(error instanceof Error ? error.message : 'Cup-oppsettet kunne ikke lages.')
     }
   }
+
+  // Med inntil 16 spillere går alle automatisk videre fra pulje til cup.
+  useEffect(() => {
+    if (!isClubAdmin || !selectedTournament || tournamentBusy) return
+    const poolMatches = selectedTournament.matches.filter((match) => match.phase === 'pool')
+    if (selectedTournament.cupRound > 0
+      || poolMatches.length === 0
+      || poolMatches.some((match) => !match.winnerSignupId)
+      || selectedTournament.participants.length > 16
+      || autoCupAttemptedRef.current === selectedTournament.eventDate) return
+    autoCupAttemptedRef.current = selectedTournament.eventDate
+    const allIds = new Set(selectedTournament.participants.map((participant) => participant.signupId))
+    void persistTournament(setTournamentAdvancement(selectedTournament, allIds), 'Alle spillere er automatisk videre til cup.')
+  }, [isClubAdmin, selectedTournament, tournamentBusy])
 
   function applyCheckoutSuggestion() {
     if (!currentPlayer || !checkoutHint) return
@@ -2513,6 +2638,7 @@ function App() {
             onSeedChange={(signupId, rank) => setTournamentSeedRanks((current) => ({ ...current, [signupId]: rank }))}
             onDraw={() => void drawTournamentPools()}
             onPlayMatch={startTournamentMatch}
+            onReadinessChange={updateTournamentReadiness}
             onToggleAdvancement={toggleTournamentAdvancement}
             onCreateCup={() => void createTournamentCup()}
           />
@@ -2560,6 +2686,7 @@ function App() {
             onSeedChange={(signupId, rank) => setTournamentSeedRanks((current) => ({ ...current, [signupId]: rank }))}
             onDraw={() => void drawTournamentPools()}
             onPlayMatch={startTournamentMatch}
+            onReadinessChange={updateTournamentReadiness}
             onToggleAdvancement={toggleTournamentAdvancement}
             onCreateCup={() => void createTournamentCup()}
           />
