@@ -965,18 +965,19 @@ export async function deleteSavedMatch(matchId: string): Promise<void> {
   if (navigator.onLine) await syncPendingChanges()
 }
 
-export async function sendMatchReport(match: SavedMatch): Promise<'sent' | 'queued' | 'unavailable'> {
+export async function sendMatchReport(match: SavedMatch): Promise<'sent' | 'queued' | 'unavailable' | 'no-recipients'> {
   if (readGuestSession()) return 'unavailable'
   if (!supabase) return 'unavailable'
   if (!navigator.onLine) {
     await queueChange({ kind: 'send-email', match })
     return 'queued'
   }
-  const { error } = await supabase.functions.invoke('send-match-report', { body: match })
+  const { data, error } = await supabase.functions.invoke('send-match-report', { body: match })
   if (error) {
     await queueChange({ kind: 'send-email', match })
     return 'queued'
   }
+  if (data?.sent === false && data?.recipientCount === 0) return 'no-recipients'
   return 'sent'
 }
 

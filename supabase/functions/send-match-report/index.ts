@@ -69,13 +69,14 @@ Deno.serve(async (request) => {
   const authorization = request.headers.get('Authorization')
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   const resendApiKey = Deno.env.get('RESEND_API_KEY')
   const fromAddress = Deno.env.get('RESEND_FROM_EMAIL')
 
   if (!authorization || !supabaseUrl || !supabaseAnonKey) {
     return Response.json({ error: 'Authentication is required.' }, { status: 401, headers: corsHeaders })
   }
-  if (!resendApiKey || !fromAddress) {
+  if (!serviceRoleKey || !resendApiKey || !fromAddress) {
     return Response.json({ error: 'Email delivery is not configured.' }, { status: 503, headers: corsHeaders })
   }
 
@@ -97,6 +98,35 @@ Deno.serve(async (request) => {
     return Response.json({ error: 'Invalid match report.' }, { status: 400, headers: corsHeaders })
   }
 
+  if (!report.players.every((player) => player && typeof player.name === 'string' && player.name.trim())) {
+    return Response.json({ error: 'Invalid match report.' }, { status: 400, headers: corsHeaders })
+  }
+
+  const playerIds = Array.from(new Set(report.players.map((player) => player.name.trim().toLowerCase())))
+  const adminClient = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
+  const { data: playerProfiles, error: profilesError } = await adminClient
+    .from('member_player_profiles')
+    .select('user_id')
+    .in('player_id', playerIds)
+  if (profilesError) {
+    console.error('Could not find registered accounts for match players:', profilesError)
+    return Response.json({ error: 'Could not find registered match players.' }, { status: 500, headers: corsHeaders })
+  }
+
+  const playerUsers = await Promise.all((playerProfiles ?? []).map(async ({ user_id }) => {
+    const { data, error } = await adminClient.auth.admin.getUserById(user_id)
+    if (error) throw error
+    return data.user
+  }))
+  const recipients = Array.from(new Set(playerUsers
+    .filter((player) => player?.email && player.email_confirmed_at)
+    .map((player) => player.email!)))
+  if (recipients.length === 0) {
+    return Response.json({ sent: false, recipientCount: 0 }, { headers: corsHeaders })
+  }
+
   const playerText = report.players.map(formatPlayer).join('\n\n')
   const safeWinner = escapeHtml(report.winnerName)
   const playerHtml = report.players.map((player) => {
@@ -109,7 +139,8 @@ Deno.serve(async (request) => {
     return `<section><h2>${escapeHtml(player.name)} · ${player.legsWon} legg</h2><p>3-pilssnitt: ${player.average3.toFixed(1)} · 100+: ${player.tons} · 180: ${player.oneEighties} · høyeste runde: ${player.highestVisit}</p><p>${player.pointsScored} poeng på ${player.dartsThrown} piler · ${player.score} igjen</p><ul>${visits}</ul></section>`
   }).join('')
 
-  const emailResponse = await fetch('https://api.resend.com/emails', {
+  for (const recipient of recipients) {
+    const emailResponse = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${resendApiKey}`,
@@ -117,17 +148,18 @@ Deno.serve(async (request) => {
     },
     body: JSON.stringify({
       from: fromAddress,
-      to: [user.email],
+      to: [recipient],
       subject: `Kampresultat: ${report.winnerName} vant · Best av ${report.bestOfLegs}`,
       text: `Steinkjer DART-X · Kampresultat\n\n${report.winnerName} vant kampen, best av ${report.bestOfLegs}.\nDato: ${report.playedAt}\n\n${playerText}`,
       html: `<main style="font-family:Arial,sans-serif;color:#19231e;max-width:680px;margin:auto"><p style="color:#175c45;font-weight:bold;letter-spacing:2px">STEINKJER DART-X</p><h1>Kampresultat</h1><p><strong>${safeWinner}</strong> vant kampen · best av ${report.bestOfLegs}</p><p>${escapeHtml(report.playedAt)}</p>${playerHtml}</main>`,
     }),
   })
 
-  if (!emailResponse.ok) {
-    console.error('Email provider rejected match report:', await emailResponse.text())
-    return Response.json({ error: 'Could not send the match report.' }, { status: 502, headers: corsHeaders })
+    if (!emailResponse.ok) {
+      console.error('Email provider rejected match report:', await emailResponse.text())
+      return Response.json({ error: 'Could not send the match report.' }, { status: 502, headers: corsHeaders })
+    }
   }
 
-  return Response.json({ sent: true, recipient: user.email }, { headers: corsHeaders })
+  return Response.json({ sent: true, recipientCount: recipients.length }, { headers: corsHeaders })
 })

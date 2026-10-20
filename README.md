@@ -47,9 +47,11 @@ Appen bruker Supabase Auth for e-post/passord-kontoer. Ved registrering oppgir b
 7. Sett `RESEND_API_KEY` og `RESEND_FROM_EMAIL` som Edge Function secrets i Supabase Dashboard. Ikke legg Resend-nøkkelen i `.env.local` eller frontend-koden.
 8. Publiser e-postfunksjonen med `supabase functions deploy send-match-report`. Funksjonen krever gyldig Supabase-innlogging (`verify_jwt = true`).
 
+Kampresultatrapporten sendes separat til hver bekreftede konto som har koblet spillerprofilen sin til en spiller i kampen. Gjester og spillere uten en koblet, bekreftet e-postkonto mottar ikke e-post.
+
 Bruk **Glemt passord?** på innloggingssiden for å få tilsendt en tilbakestillingslenke. Ikke legg en `service_role`-nøkkel i appen. Alle registrerte brukere får tilgang til de delte klubbdataene; del derfor registreringsadressen med personer som skal ha tilgang.
 
-Etter en vunnet kamp sendes rapporten til e-postadressen til brukeren som er logget inn. Rapporten inneholder kampresultat, leggseier, 3-pilssnitt, antall 100+-runder og 180-ere, høyeste runde og registrerte turer for hver spiller. I totalsummodus velges antall piler brukt manuelt. E-post kan ikke sendes før Supabase- og Resend-oppsettet over er fullført.
+Etter en vunnet kamp sendes rapporten separat til de bekreftede e-postadressene til kontoene som har koblet spillerprofilene sine til spillerne i kampen. Kontoer uten koblet spillerprofil og gjester mottar ikke rapporten. Rapporten inneholder kampresultat, leggseier, 3-pilssnitt, antall 100+-runder og 180-ere, høyeste runde og registrerte turer for hver spiller. I totalsummodus velges antall piler brukt manuelt. E-post kan ikke sendes før Supabase- og Resend-oppsettet over er fullført.
 
 ### Administrator for klubbpåmelding
 
