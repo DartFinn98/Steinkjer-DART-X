@@ -251,6 +251,24 @@ function playerRecord(name: string, playedAt: string): SavedPlayer {
   }
 }
 
+type PlayerUpsertRecord = {
+  id: string
+  name: string
+  last_played_at: string
+}
+
+function uniquePlayerUpsertRecords(records: PlayerUpsertRecord[]): PlayerUpsertRecord[] {
+  return Array.from(new Map(records.map((record) => [record.id, record])).values())
+}
+
+function matchPlayerUpsertRecords(players: PlayerMatchStats[], playedAt: string): PlayerUpsertRecord[] {
+  return uniquePlayerUpsertRecords(players.map((player) => ({
+    id: player.name.trim().toLowerCase(),
+    name: player.name.trim(),
+    last_played_at: playedAt,
+  })))
+}
+
 function transactionComplete(database: IDBDatabase, transaction: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
     transaction.oncomplete = () => {
@@ -818,7 +836,12 @@ export async function uploadProfileAvatar(userId: string, file: File): Promise<s
 
 export async function savePlayers(names: string[]): Promise<void> {
   const playedAt = new Date().toISOString()
-  const records = names.map((value) => value.trim()).filter(Boolean).map((name) => playerRecord(name, playedAt))
+  const records = Array.from(new Map(
+    names.map((value) => value.trim()).filter(Boolean).map((name) => {
+      const player = playerRecord(name, playedAt)
+      return [player.id, player] as const
+    }),
+  ).values())
   const guestSession = readGuestSession()
   if (guestSession) {
     const players = new Map(guestSession.savedData.players.map((player) => [player.id, player]))
@@ -903,11 +926,7 @@ export async function saveFinishedMatch(match: SavedMatch): Promise<void> {
     await queueChange({ kind: 'save-match', match })
     return
   }
-  const playerRecords = match.players.map((player) => ({
-    id: player.name.trim().toLowerCase(),
-    name: player.name.trim(),
-    last_played_at: match.playedAt,
-  }))
+  const playerRecords = matchPlayerUpsertRecords(match.players, match.playedAt)
   const { error: playersError } = await supabase.from('players').upsert(playerRecords, { onConflict: 'id' })
   const { error: matchError } = playersError ? { error: playersError } : await supabase.from('matches').upsert({
     id: match.id,
@@ -977,11 +996,12 @@ export async function syncPendingChanges(): Promise<{ synced: number; pending: n
   for (const change of pending) {
     try {
       if (change.kind === 'save-players') {
-        const { error } = await supabase.from('players').upsert(change.players.map((player) => ({
+        const playerRecords = uniquePlayerUpsertRecords(change.players.map((player) => ({
           id: player.id,
           name: player.name,
           last_played_at: player.lastPlayedAt,
-        })), { onConflict: 'id' })
+        })))
+        const { error } = await supabase.from('players').upsert(playerRecords, { onConflict: 'id' })
         if (error) {
           recordSyncIssue(change, error)
           continue
@@ -993,11 +1013,7 @@ export async function syncPendingChanges(): Promise<{ synced: number; pending: n
           continue
         }
       } else if (change.kind === 'save-match') {
-        const playerRecords = change.match.players.map((player) => ({
-          id: player.name.trim().toLowerCase(),
-          name: player.name.trim(),
-          last_played_at: change.match.playedAt,
-        }))
+        const playerRecords = matchPlayerUpsertRecords(change.match.players, change.match.playedAt)
         const { error: playersError } = await supabase.from('players').upsert(playerRecords, { onConflict: 'id' })
         if (playersError) {
           recordSyncIssue(change, playersError)
