@@ -74,6 +74,7 @@ export type TournamentGameHistory = {
 
 export type TournamentMatchProgress = {
   progressId?: string
+  courtNumber?: 1 | 2 | 3 | 4 | 5
   players: TournamentGamePlayer[]
   activePlayer: number
   legsWon: Record<string, number>
@@ -120,6 +121,11 @@ export type ClubDocument = {
   name: string
   createdAt: string | null
   size: number
+}
+
+export type PendingSyncIssue = {
+  kind: PendingChange['kind']
+  message: string
 }
 
 const DATABASE_NAME = 'darttavla'
@@ -953,10 +959,18 @@ export async function sendMatchReport(match: SavedMatch): Promise<'sent' | 'queu
   return 'sent'
 }
 
-export async function syncPendingChanges(): Promise<{ synced: number; pending: number }> {
-  if (!supabase || !navigator.onLine) return { synced: 0, pending: 0 }
+export async function syncPendingChanges(): Promise<{ synced: number; pending: number; issues: PendingSyncIssue[] }> {
+  if (!supabase || !navigator.onLine) return { synced: 0, pending: 0, issues: [] }
   const pending = await loadPendingChanges()
   let synced = 0
+  const issues: PendingSyncIssue[] = []
+  const recordSyncIssue = (change: PendingChange, error: unknown) => {
+    console.error(`Could not sync pending ${change.kind} change:`, error)
+    const message = typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string'
+      ? error.message
+      : 'Ukjent feil'
+    issues.push({ kind: change.kind, message })
+  }
 
   for (const change of pending) {
     try {
@@ -967,13 +981,13 @@ export async function syncPendingChanges(): Promise<{ synced: number; pending: n
           last_played_at: player.lastPlayedAt,
         })), { onConflict: 'id' })
         if (error) {
-          console.error('Could not sync pending player changes:', error)
+          recordSyncIssue(change, error)
           continue
         }
       } else if (change.kind === 'delete-player') {
         const { error } = await supabase.from('players').delete().eq('id', change.playerId)
         if (error) {
-          console.error('Could not sync pending player deletion:', error)
+          recordSyncIssue(change, error)
           continue
         }
       } else if (change.kind === 'save-match') {
@@ -984,7 +998,7 @@ export async function syncPendingChanges(): Promise<{ synced: number; pending: n
         }))
         const { error: playersError } = await supabase.from('players').upsert(playerRecords, { onConflict: 'id' })
         if (playersError) {
-          console.error('Could not sync players for a pending match:', playersError)
+          recordSyncIssue(change, playersError)
           continue
         }
         const { error: matchError } = await supabase.from('matches').upsert({
@@ -999,19 +1013,19 @@ export async function syncPendingChanges(): Promise<{ synced: number; pending: n
           players: change.match.players,
         }, { onConflict: 'id' })
         if (matchError) {
-          console.error('Could not sync a pending match:', matchError)
+          recordSyncIssue(change, matchError)
           continue
         }
       } else if (change.kind === 'delete-match') {
         const { error } = await supabase.from('matches').delete().eq('id', change.matchId)
         if (error) {
-          console.error('Could not sync pending match deletion:', error)
+          recordSyncIssue(change, error)
           continue
         }
       } else {
         const { error } = await supabase.functions.invoke('send-match-report', { body: change.match })
         if (error) {
-          console.error('Could not send a pending match report:', error)
+          recordSyncIssue(change, error)
           continue
         }
       }
@@ -1019,7 +1033,7 @@ export async function syncPendingChanges(): Promise<{ synced: number; pending: n
       await removePendingChange(change.id)
       if (change.kind !== 'send-email') synced += 1
     } catch (error) {
-      console.error(`Could not sync pending ${change.kind} change:`, error)
+      recordSyncIssue(change, error)
       continue
     }
   }
@@ -1028,5 +1042,6 @@ export async function syncPendingChanges(): Promise<{ synced: number; pending: n
   return {
     synced,
     pending: remaining.filter((change) => change.kind !== 'send-email').length,
+    issues,
   }
 }

@@ -34,6 +34,44 @@ create table if not exists public.club_tournaments (
   updated_at timestamptz not null default now()
 );
 
+create or replace function public.enforce_unique_tournament_courts()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+declare
+  active_match jsonb;
+  assigned_courts integer[] := '{}';
+  court_number integer;
+begin
+  for active_match in
+    select value
+    from jsonb_array_elements(new.matches) as matches(value)
+    where value ? 'inProgress'
+  loop
+    if active_match #>> '{inProgress,courtNumber}' is null then
+      continue;
+    end if;
+    if active_match #>> '{inProgress,courtNumber}' !~ '^[1-5]$' then
+      raise exception 'Turneringskampen har et ugyldig banenummer.';
+    end if;
+
+    court_number := (active_match #>> '{inProgress,courtNumber}')::integer;
+    if court_number = any(assigned_courts) then
+      raise exception 'Bane % er allerede tildelt en pågående turneringskamp.', court_number;
+    end if;
+    assigned_courts := array_append(assigned_courts, court_number);
+  end loop;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists enforce_unique_tournament_courts on public.club_tournaments;
+create trigger enforce_unique_tournament_courts
+  before insert or update of matches on public.club_tournaments
+  for each row execute function public.enforce_unique_tournament_courts();
+
 create table if not exists public.club_admins (
   user_id uuid primary key references auth.users(id) on delete cascade,
   granted_at timestamptz not null default now()
