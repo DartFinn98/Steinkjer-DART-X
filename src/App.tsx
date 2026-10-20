@@ -2771,12 +2771,12 @@ function App() {
           <div className="bull-off-copy">
             <p className="eyebrow">42-PILERSREGEL / AVGJØR LEGG</p>
             <h1>BULL<span className="title-period">.</span></h1>
-            <p className="intro">{dartLimitBullOff ? 'Ingen har avgjort 501-leggen etter 42 piler hver. Kast mot bull, og velg spilleren som kom nærmest.' : 'Leggen avgjøres med et bullkast. Trykk på spilleren som kom nærmest bull.'}</p>
+            <p className="intro">{dartLimitBullOff ? 'Ingen har avgjort 501-legget etter 42 piler hver. Kast mot bull, og velg spilleren som kom nærmest.' : 'Legget avgjøres med et bullkast. Trykk på spilleren som kom nærmest bull.'}</p>
             <div className="rules-line"><span>42 PILER HVER</span><i /> BULLKAST AVGJØR LEGGVINNEREN</div>
           </div>
           <div className="bull-off-panel">
             <div className="panel-heading"><div><p className="eyebrow">BULL-OFF</p><h2>Trykk på den som kom nærmest</h2></div><span className="panel-index">BULL / 42</span></div>
-            <p className="bull-toss-note" role={dartLimitBullOff ? 'alert' : 'status'}>{dartLimitBullOff ? 'Varsel: Alle spillerne har kastet 42 piler uten å avgjøre leggen.' : 'Kast mot bull for å avgjøre leggen.'}</p>
+            <p className="bull-toss-note" role={dartLimitBullOff ? 'alert' : 'status'}>{dartLimitBullOff ? 'Varsel: Alle spillerne har kastet 42 piler uten å avgjøre legget.' : 'Kast mot bull for å avgjøre legget.'}</p>
             <div className="bull-winner-choices" role="group" aria-label="Velg spilleren som kom nærmest bull">{players.map((player) => <button key={player.id} type="button" onClick={() => finishLegBullOff(player.id)}>{player.name}</button>)}</div>
             <button className="text-button bull-undo-button" type="button" onClick={undoVisit}>Angre siste tur</button>
           </div>
