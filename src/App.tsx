@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { getCheckoutHint } from './checkout'
-import { addTournamentCupRound, beginGuestSession, deleteAllClubTournaments, deleteClubDocument, deleteClubSignup, deleteClubTournament, deleteSavedMatch, deleteSavedPlayer, downloadClubDocument, endGuestSession, finishTournamentMatch, getGuestDisplayName, loadClubAdminStatus, loadClubAdmins, loadClubDocuments, loadClubSignups, loadClubTournaments, loadLinkedPlayerProfile, loadRegisteredPlayerNames, loadSavedData, saveClubSignup, saveClubTournament, saveFinishedMatch, saveLinkedPlayerId, savePlayers, saveTournamentMatchProgress, sendMatchReport, setClubAdminRole, syncPendingChanges, updateClubSignup, uploadClubDocument, uploadProfileAvatar } from './database'
+import { addTournamentCupRound, beginGuestSession, deleteAllClubTournaments, deleteClubDocument, deleteClubSignup, deleteClubTournament, deleteSavedMatch, deleteSavedPlayer, downloadClubDocument, endGuestSession, finishTournamentMatch, getGuestDisplayName, loadClubAdminStatus, loadClubAdmins, loadClubDocuments, loadClubSignups, loadClubTournaments, loadLinkedPlayerProfile, loadRegisteredPlayerNames, loadSavedData, saveClubSignup, saveClubTournament, saveFinishedMatch, saveLinkedPlayerId, savePlayers, saveTournamentMatchProgress, sendMatchReport, setClubAdminRole, syncPendingChanges, updateClubSignup, updateTournamentParticipantAvailability, uploadClubDocument, uploadProfileAvatar } from './database'
 import type { ClubAdmin, ClubDocument, ClubSignup, ClubTournament, PendingSyncIssue, SavedData, TournamentGameHistory, TournamentMatch, TournamentMatchProgress, TournamentGamePlayer } from './database'
 import { supabase } from './supabase'
 import type { Session } from '@supabase/supabase-js'
@@ -2408,17 +2408,24 @@ function App() {
       && (match.playerOneSignupId === signupId || match.playerTwoSignupId === signupId))) return
     const selectedParticipant = selectedTournament.participants.find((participant) => participant.signupId === signupId)
     if (!selectedParticipant || (selectedParticipant.availability ?? 'ready') === availability) return
-    const participants = selectedTournament.participants.map((participant) => participant.signupId !== signupId
-      ? participant
-      : {
-        ...participant,
-        availability,
-        readySince: availability === 'ready' ? new Date().toISOString() : undefined,
-      })
     const statusMessage = availability === 'ready'
       ? 'Spilleren er meldt inn og markert klar.'
       : availability === 'pause' ? 'Spilleren er satt på pause.' : 'Spilleren er markert som ikke møtt.'
-    void persistTournament({ ...selectedTournament, participants }, statusMessage)
+    setTournamentBusy(true)
+    setTournamentMessage('')
+    setTournamentMessageIsError(false)
+    void updateTournamentParticipantAvailability(selectedTournament.eventDate, signupId, availability)
+      .then((updatedTournament) => {
+        const updatedTournaments = [...clubTournamentsRef.current.filter((item) => item.eventDate !== updatedTournament.eventDate), updatedTournament]
+          .sort((first, second) => first.eventDate.localeCompare(second.eventDate))
+        clubTournamentsRef.current = updatedTournaments
+        setClubTournaments(updatedTournaments)
+        setTournamentMessage(statusMessage)
+      })
+      .catch((error: unknown) => {
+        showTournamentError(error instanceof Error ? error.message : 'Spillerstatusen kunne ikke lagres.')
+      })
+      .finally(() => setTournamentBusy(false))
   }
 
   async function createTournamentCup() {

@@ -740,6 +740,24 @@ export async function addTournamentCupRound(
   return mapClubTournamentRow(row as ClubTournamentRow)
 }
 
+export async function updateTournamentParticipantAvailability(
+  eventDate: string,
+  signupId: string,
+  availability: 'not-arrived' | 'ready' | 'pause',
+): Promise<ClubTournament> {
+  if (!supabase) throw new Error('Supabase er ikke konfigurert.')
+  if (!navigator.onLine) throw new Error('Du må være på nett for å oppdatere spillerstatus.')
+  const { data, error } = await supabase.rpc('update_club_tournament_participant_availability', {
+    target_event_date: eventDate,
+    target_signup_id: signupId,
+    target_availability: availability,
+  })
+  if (error) throw error
+  const row = Array.isArray(data) ? data.length === 1 ? data[0] : null : data
+  if (!row || typeof row !== 'object') throw new Error('Supabase returnerte ikke oppdatert spillerstatus.')
+  return mapClubTournamentRow(row as ClubTournamentRow)
+}
+
 export async function saveClubTournament(tournament: ClubTournament): Promise<void> {
   if (!supabase) throw new Error('Supabase er ikke konfigurert.')
   if (!navigator.onLine) throw new Error('Du må være på nett for å lagre turneringen.')

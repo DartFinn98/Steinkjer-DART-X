@@ -75,7 +75,7 @@ Turneringsoppsettet ligger under **Administrasjon**, under deltakerlistene, og e
 
 Cupen trekker de videregående spillerne i et seedet cupoppsett og gir walkover der det trengs. Kampformatet følger klubbens skjema: puljespill best av 3 legg, de første cuprundene best av 5, semifinaler best av 7 og finale best av 9. Med to spillere som går videre blir den ene cupkampen finalen; med fire blir første cuprunde semifinalene.
 
-Turneringer og resultater lagres i Supabase-tabellen `club_tournaments`. Kjør `supabase/schema.sql` på nytt etter oppgradering for å opprette eller oppdatere tabellen og administratorpolicyene. Klubbadministratorer kan starte opptil fem ulike turneringskamper samtidig, én per bane; kampframdrift og resultater lagres separat per kamp slik at banene ikke overskriver hverandre. Kampoversikten oppdateres automatisk mens turneringssiden er åpen.
+Turneringer og resultater lagres i Supabase-tabellen `club_tournaments`. Kjør `supabase/schema.sql` på nytt etter oppgradering for å opprette eller oppdatere tabellen, databasefunksjonene og administratorpolicyene. Status for spillernes innsjekking oppdateres atomisk uten å overskrive kampframdrift som lagres samtidig. Klubbadministratorer kan starte opptil fem ulike turneringskamper samtidig, én per bane; kampframdrift og resultater lagres separat per kamp slik at banene ikke overskriver hverandre. Kampoversikten oppdateres automatisk mens turneringssiden er åpen.
 
 ## Regler
 

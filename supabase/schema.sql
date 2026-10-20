@@ -505,10 +505,88 @@ begin
 end;
 $$;
 
+create or replace function public.update_club_tournament_participant_availability(
+  target_event_date date,
+  target_signup_id text,
+  target_availability text
+)
+returns public.club_tournaments
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  tournament_row public.club_tournaments%rowtype;
+  participant_found boolean;
+begin
+  if not public.is_club_admin() then
+    raise exception 'Administrator access required' using errcode = '42501';
+  end if;
+  if target_availability is null or target_availability not in ('not-arrived', 'ready', 'pause') then
+    raise exception 'Ugyldig spillerstatus.';
+  end if;
+
+  select * into tournament_row
+  from public.club_tournaments
+  where event_date = target_event_date
+  for update;
+  if not found then
+    raise exception 'Turneringen ble ikke funnet.';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(tournament_row.matches) as active_match(value)
+    where active_match.value ? 'inProgress'
+      and (
+        active_match.value ->> 'playerOneSignupId' = target_signup_id
+        or active_match.value ->> 'playerTwoSignupId' = target_signup_id
+      )
+  ) then
+    raise exception 'Spillerstatus kan ikke endres mens spilleren er i en kamp.';
+  end if;
+
+  select exists (
+    select 1
+    from jsonb_array_elements(tournament_row.participants) as participant(value)
+    where participant.value ->> 'signupId' = target_signup_id
+  ) into participant_found;
+  if not participant_found then
+    raise exception 'Spilleren finnes ikke i turneringen.';
+  end if;
+
+  update public.club_tournaments
+  set participants = (
+        select jsonb_agg(
+          case
+            when participant.value ->> 'signupId' <> target_signup_id then participant.value
+            when target_availability = 'ready' then
+              (participant.value - 'readySince') || jsonb_build_object(
+                'availability', target_availability,
+                'readySince', now()
+              )
+            else
+              (participant.value - 'readySince') || jsonb_build_object(
+                'availability', target_availability
+              )
+          end
+          order by participant.ordinality
+        )
+        from jsonb_array_elements(tournament_row.participants) with ordinality as participant(value, ordinality)
+      ),
+      updated_at = now()
+  where event_date = target_event_date
+  returning * into tournament_row;
+
+  return tournament_row;
+end;
+$$;
+
 revoke all on function public.update_club_tournament_match(date, text, text, jsonb, text, integer, integer) from public;
 revoke all on function public.add_club_tournament_cup_round(date, smallint, jsonb) from public;
+revoke all on function public.update_club_tournament_participant_availability(date, text, text) from public;
 grant execute on function public.update_club_tournament_match(date, text, text, jsonb, text, integer, integer) to authenticated;
 grant execute on function public.add_club_tournament_cup_round(date, smallint, jsonb) to authenticated;
+grant execute on function public.update_club_tournament_participant_availability(date, text, text) to authenticated;
 
 drop policy if exists "Members can manage their own player profile link" on public.member_player_profiles;
 create policy "Members can manage their own player profile link"
