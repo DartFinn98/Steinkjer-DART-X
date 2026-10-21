@@ -102,6 +102,7 @@ export type TournamentMatch = {
   playerTwoLegs: number | null
   winnerSignupId: string | null
   refereeSignupId?: string
+  poolMeeting?: 1 | 2
   bestOfLegs: 3 | 5 | 7 | 9
   playerStats?: TournamentPlayerMatchStats[]
   inProgress?: TournamentMatchProgress

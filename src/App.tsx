@@ -190,6 +190,7 @@ function TournamentBoard({
     }
   }
   const participantName = (signupId: string) => tournament?.participants.find((participant) => participant.signupId === signupId)?.playerName ?? 'Ukjent spiller'
+  const poolMeetingLabel = (match: TournamentMatch) => match.poolMeeting === 2 ? ' · returoppgjør' : ''
   const getRoundLabel = (round: number, matchesInRound: number) => matchesInRound === 1
     ? 'Finale'
     : matchesInRound === 2 ? 'Semifinale' : `Cup · runde ${round}`
@@ -297,7 +298,7 @@ function TournamentBoard({
           const refereeSignupId = getTournamentMatchRefereeSignupId(tournament, match)
           const refereeName = refereeSignupId ? participantName(refereeSignupId) : null
           const progressScore = `${progress.legsWon[progress.players[0]?.id ?? ''] ?? 0}–${progress.legsWon[progress.players[1]?.id ?? ''] ?? 0}`
-          const roundLabel = match.phase === 'pool' ? `Pulje ${match.poolNumber}` : getRoundLabel(match.roundNumber, cupMatches.filter((item) => item.roundNumber === match.roundNumber).length)
+          const roundLabel = match.phase === 'pool' ? `Pulje ${match.poolNumber}${poolMeetingLabel(match)}` : getRoundLabel(match.roundNumber, cupMatches.filter((item) => item.roundNumber === match.roundNumber).length)
           const availableForAssignment = ([1, 2, 3, 4, 5] as const).filter((court) => !activeMatches.some((other) => other.id !== match.id && other.inProgress?.courtNumber === court))
           return <li key={match.id}>
             <div className="tournament-day-match-info">
@@ -330,14 +331,14 @@ function TournamentBoard({
           {recommendedMatch && <div className="tournament-recommendation">
             <span className="tournament-recommendation-label">SYSTEMETS FLYTVALG</span>
             <strong>{participantName(recommendedMatch.playerOneSignupId)} – {participantName(recommendedMatch.playerTwoSignupId!)}</strong>
-            <span>{recommendedMatch.phase === 'pool' ? `Pulje ${recommendedMatch.poolNumber}` : getRoundLabel(recommendedMatch.roundNumber, cupMatches.filter((item) => item.roundNumber === recommendedMatch.roundNumber).length)} · Begge er klare · Har ventet minst {getMatchWaitTime(recommendedMatch)} · {Math.min(matchesPlayed.get(recommendedMatch.playerOneSignupId) ?? 0, matchesPlayed.get(recommendedMatch.playerTwoSignupId!) ?? 0)}–{Math.max(matchesPlayed.get(recommendedMatch.playerOneSignupId) ?? 0, matchesPlayed.get(recommendedMatch.playerTwoSignupId!) ?? 0)} kamper spilt</span>
+            <span>{recommendedMatch.phase === 'pool' ? `Pulje ${recommendedMatch.poolNumber}${poolMeetingLabel(recommendedMatch)}` : getRoundLabel(recommendedMatch.roundNumber, cupMatches.filter((item) => item.roundNumber === recommendedMatch.roundNumber).length)} · Begge er klare · Har ventet minst {getMatchWaitTime(recommendedMatch)} · {Math.min(matchesPlayed.get(recommendedMatch.playerOneSignupId) ?? 0, matchesPlayed.get(recommendedMatch.playerTwoSignupId!) ?? 0)}–{Math.max(matchesPlayed.get(recommendedMatch.playerOneSignupId) ?? 0, matchesPlayed.get(recommendedMatch.playerTwoSignupId!) ?? 0)} kamper spilt</span>
             <small>Anbefalingen tar hensyn til ventetid og kampbelastning. Du velger selv hvilken kamp som starter.</small>
           </div>}
           <h4>Neste kamper · velg selv</h4>
           {queuedMatches.length > 0
             ? <ol>{queuedMatches.map((match) => <li key={match.id}>
               <span>
-                {match.phase === 'pool' ? `Pulje ${match.poolNumber}` : getRoundLabel(match.roundNumber, cupMatches.filter((item) => item.roundNumber === match.roundNumber).length)} · {participantName(match.playerOneSignupId)} – {participantName(match.playerTwoSignupId!)}
+                {match.phase === 'pool' ? `Pulje ${match.poolNumber}${poolMeetingLabel(match)}` : getRoundLabel(match.roundNumber, cupMatches.filter((item) => item.roundNumber === match.roundNumber).length)} · {participantName(match.playerOneSignupId)} – {participantName(match.playerTwoSignupId!)}
                 <small>{activeSignupIds.has(match.playerOneSignupId) || activeSignupIds.has(match.playerTwoSignupId!)
                   ? 'Spiller opptatt på en annen bane'
                   : [participantById.get(match.playerOneSignupId), participantById.get(match.playerTwoSignupId!)].find((participant) => participant?.availability === 'not-arrived')
@@ -419,6 +420,7 @@ function TournamentBoard({
           const advancingPlayers = poolParticipants.filter((participant) => participant.advances)
           return <section className={`tournament-print-sheet tournament-print-pool${poolParticipants.length <= 4 ? ' tournament-print-pool-small' : ''}`} key={`print-pool-${poolNumber}`}>
             <div className="tournament-print-pool-heading"><h2>Pulje {poolNumber}</h2><p>{formatClubDate(tournament.eventDate)} <span>Bane nr. __________</span></p></div>
+            {poolParticipants.length === 3 && <p className="tournament-print-pool-repeat-note">Alle møter hverandre to ganger. Første resultat står over returoppgjøret.</p>}
             <table className="tournament-print-standings">
               <thead><tr><th>Nr</th><th>Navn</th><th>Klubb</th>{poolParticipants.map((_, index) => <th key={index}>{index + 1}</th>)}<th>Sum seire</th><th>Legg diff.</th><th>Plass</th></tr></thead>
               <tbody>{poolStandings.map((participant) => {
@@ -429,18 +431,21 @@ function TournamentBoard({
                   <td />
                   {poolParticipants.map((opponent) => {
                     if (opponent.signupId === participant.signupId) return <td className="tournament-print-matrix-diagonal" key={opponent.signupId} />
-                    const match = matches.find((candidate) => (
+                    const opponentMatches = matches.filter((candidate) => (
                       candidate.playerOneSignupId === participant.signupId && candidate.playerTwoSignupId === opponent.signupId
                     ) || (
                       candidate.playerTwoSignupId === participant.signupId && candidate.playerOneSignupId === opponent.signupId
-                    ))
-                    if (!match || match.playerOneLegs === null || match.playerTwoLegs === null) {
+                    )).sort((first, second) => (first.poolMeeting ?? 1) - (second.poolMeeting ?? 1))
+                    if (opponentMatches.length === 0) {
                       return <td key={opponent.signupId} />
                     }
-                    const score = match.playerOneSignupId === participant.signupId
-                      ? `${match.playerOneLegs}–${match.playerTwoLegs}`
-                      : `${match.playerTwoLegs}–${match.playerOneLegs}`
-                    return <td className="tournament-print-matrix-score" key={opponent.signupId}>{score}</td>
+                    return <td className="tournament-print-matrix-score" key={opponent.signupId}>{opponentMatches.map((match) => {
+                      if (match.playerOneLegs === null || match.playerTwoLegs === null) return <span key={match.id}>·</span>
+                      const score = match.playerOneSignupId === participant.signupId
+                        ? `${match.playerOneLegs}–${match.playerTwoLegs}`
+                        : `${match.playerTwoLegs}–${match.playerOneLegs}`
+                      return <span key={match.id}>{score}</span>
+                    })}</td>
                   })}
                   <td className="tournament-print-stat">{participant.wins}</td>
                   <td className="tournament-print-stat">{participant.legDifference > 0 ? `+${participant.legDifference}` : participant.legDifference}</td>
@@ -560,7 +565,7 @@ function TournamentMatchRow({ match, tournament, isAdmin, busy, canPlayMatch, ca
     ? `${match.inProgress.legsWon[match.inProgress.players[0]?.id ?? ''] ?? 0}–${match.inProgress.legsWon[match.inProgress.players[1]?.id ?? ''] ?? 0}`
     : ''
   return <li className="tournament-match">
-    <div className="tournament-match-info"><span>{playerOne}</span><b>–</b><span>{playerTwo}</span><small>Best av {match.bestOfLegs}</small><small className="tournament-referee">{refereeName ? `Dommer: ${refereeName}` : 'Dommer ikke tildelt'}</small></div>
+    <div className="tournament-match-info"><span>{playerOne}</span><b>–</b><span>{playerTwo}</span><small>Best av {match.bestOfLegs}{match.phase === 'pool' && match.poolMeeting ? ` · ${match.poolMeeting === 2 ? 'returoppgjør' : 'første møte'}` : ''}</small><small className="tournament-referee">{refereeName ? `Dommer: ${refereeName}` : 'Dommer ikke tildelt'}</small></div>
     {completed ? <strong className="tournament-match-result">{match.playerOneLegs !== null && match.playerTwoLegs !== null ? `${match.playerOneLegs}–${match.playerTwoLegs}` : 'Videre på walkover'} · {tournament.participants.find((participant) => participant.signupId === match.winnerSignupId)?.playerName}</strong>
       : isAdmin && match.playerTwoSignupId && match.inProgress ? <button className="tournament-play-button" type="button" disabled={busy || !canResumeMatch} onClick={() => onPlayMatch(match)}>Fortsett kampen · {progressScore} legg</button>
         : isAdmin && match.playerTwoSignupId ? <button className="tournament-play-button" type="button" disabled={busy || !canPlayMatch} onClick={() => onPlayMatch(match)}>Spill kamp på poengtavla</button>

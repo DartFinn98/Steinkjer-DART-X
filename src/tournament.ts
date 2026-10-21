@@ -15,25 +15,34 @@ function createPoolMatches(participants: TournamentParticipant[]): TournamentMat
   for (const poolNumber of poolNumbers) {
     const players = participants.filter((participant) => participant.poolNumber === poolNumber)
     let bracketPosition = 0
+    const matchups: Array<[TournamentParticipant, TournamentParticipant]> = []
     for (let first = 0; first < players.length; first += 1) {
       for (let second = first + 1; second < players.length; second += 1) {
-        const playerOne = players[first]
-        const playerTwo = players[second]
-        matches.push({
-          id: `pool:${poolNumber}:${playerOne.signupId}:${playerTwo.signupId}`,
-          phase: 'pool',
-          roundNumber: 0,
-          bracketPosition,
-          poolNumber,
-          playerOneSignupId: playerOne.signupId,
-          playerTwoSignupId: playerTwo.signupId,
-          playerOneLegs: null,
-          playerTwoLegs: null,
-          winnerSignupId: null,
-          bestOfLegs: 3,
-        })
-        bracketPosition += 1
+        matchups.push([players[first], players[second]])
       }
+    }
+    const meetings = players.length === 3
+      ? [
+        ...matchups.map(([playerOne, playerTwo]) => ({ playerOne, playerTwo, poolMeeting: 1 as const })),
+        ...matchups.map(([playerOne, playerTwo]) => ({ playerOne: playerTwo, playerTwo: playerOne, poolMeeting: 2 as const })),
+      ]
+      : matchups.map(([playerOne, playerTwo]) => ({ playerOne, playerTwo, poolMeeting: 1 as const }))
+    for (const { playerOne, playerTwo, poolMeeting } of meetings) {
+      matches.push({
+        id: `pool:${poolNumber}:${playerOne.signupId}:${playerTwo.signupId}:${poolMeeting}`,
+        phase: 'pool',
+        roundNumber: 0,
+        bracketPosition,
+        poolNumber,
+        playerOneSignupId: playerOne.signupId,
+        playerTwoSignupId: playerTwo.signupId,
+        playerOneLegs: null,
+        playerTwoLegs: null,
+        winnerSignupId: null,
+        poolMeeting,
+        bestOfLegs: 3,
+      })
+      bracketPosition += 1
     }
   }
   return matches
