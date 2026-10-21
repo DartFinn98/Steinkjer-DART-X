@@ -317,7 +317,7 @@ function TournamentBoard({
         })}</ul>}
         <div className="tournament-day-queue">
           <div className="tournament-queue-heading"><h4>Smart kampflyt</h4><span>JEVN PAUSE · DU VELGER</span></div>
-          <p className="tournament-checkin-note">Meld spillerne klare når de møter. Forslagene bruker bare innsjekkede spillere.</p>
+          <p className="tournament-checkin-note">Spillerne er klare som standard. Bruk pause eller «Ikke møtt» bare når noen ikke skal foreslås til kamp.</p>
           <ul className="tournament-readiness-list" aria-label="Spillerklarhet">
             {(tournament?.participants ?? []).map((participant) => {
               const isPlaying = activeSignupIds.has(participant.signupId)
@@ -325,7 +325,7 @@ function TournamentBoard({
               return <li key={participant.signupId}>
                 <span><strong>{participant.playerName}</strong><small>{isPlaying ? 'Spiller nå' : availability === 'not-arrived' ? 'Ikke sjekket inn' : availability === 'pause' ? 'Tar pause' : formatWaitTime(participant.readySince)}</small></span>
                 {isAdmin && <div className="tournament-readiness-actions">
-                  <button type="button" disabled={busy || isPlaying || availability === 'ready'} aria-pressed={!isPlaying && availability === 'ready'} onClick={() => onReadinessChange(participant.signupId, 'ready')}>Klar</button>
+                  {availability !== 'ready' && <button type="button" disabled={busy || isPlaying} onClick={() => onReadinessChange(participant.signupId, 'ready')}>Klar</button>}
                   <button type="button" disabled={busy || isPlaying || availability === 'pause'} aria-pressed={!isPlaying && availability === 'pause'} onClick={() => onReadinessChange(participant.signupId, 'pause')}>Pause</button>
                   <button type="button" disabled={busy || isPlaying || availability === 'not-arrived'} aria-pressed={!isPlaying && availability === 'not-arrived'} onClick={() => onReadinessChange(participant.signupId, 'not-arrived')}>Ikke møtt</button>
                 </div>}
