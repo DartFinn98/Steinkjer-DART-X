@@ -396,10 +396,10 @@ function TournamentBoard({
           const poolIsComplete = matches.every((match) => match.winnerSignupId !== null)
           const poolParticipants = tournament.participants.filter((participant) => participant.poolNumber === poolNumber)
           const advancingPlayers = poolParticipants.filter((participant) => participant.advances)
-          return <section className="tournament-print-sheet tournament-print-pool" key={`print-pool-${poolNumber}`}>
+          return <section className={`tournament-print-sheet tournament-print-pool${poolParticipants.length <= 4 ? ' tournament-print-pool-small' : ''}`} key={`print-pool-${poolNumber}`}>
             <div className="tournament-print-pool-heading"><h2>Pulje {poolNumber}</h2><p>{formatClubDate(tournament.eventDate)} <span>Bane nr. __________</span></p></div>
             <table className="tournament-print-standings">
-              <thead><tr><th>Nr</th><th>Navn</th><th>Klubb</th>{poolParticipants.map((_, index) => <th key={index}>{index + 1}</th>)}{Array.from({ length: 8 - poolParticipants.length }, (_, index) => <th key={`empty-${index}`}>{poolParticipants.length + index + 1}</th>)}<th>Sum seire</th><th>Legg diff.</th><th>Plass</th></tr></thead>
+              <thead><tr><th>Nr</th><th>Navn</th><th>Klubb</th>{poolParticipants.map((_, index) => <th key={index}>{index + 1}</th>)}<th>Sum seire</th><th>Legg diff.</th><th>Plass</th></tr></thead>
               <tbody>{poolStandings.map((participant) => {
                 const participantIndex = poolParticipants.findIndex((item) => item.signupId === participant.signupId)
                 return <tr key={participant.signupId}>
@@ -421,7 +421,6 @@ function TournamentBoard({
                       : `${match.playerTwoLegs}–${match.playerOneLegs}`
                     return <td className="tournament-print-matrix-score" key={opponent.signupId}>{score}</td>
                   })}
-                  {Array.from({ length: 8 - poolParticipants.length }, (_, index) => <td key={`empty-${participantIndex}-${index}`} />)}
                   <td className="tournament-print-stat">{participant.wins}</td>
                   <td className="tournament-print-stat">{participant.legDifference > 0 ? `+${participant.legDifference}` : participant.legDifference}</td>
                   <td className="tournament-print-stat">{poolIsComplete ? poolStandings.findIndex((item) => item.signupId === participant.signupId) + 1 : ''}</td>
@@ -440,6 +439,7 @@ function TournamentBoard({
             .sort((first, second) => first.bracketPosition - second.bracketPosition)
           const firstRoundCount = firstRoundMatches.length
           const roundCount = Math.ceil(Math.log2(firstRoundCount)) + 1
+          const getMatchNumber = (round: number, position: number) => firstRoundCount * 2 * (1 - 1 / 2 ** (round - 1)) + position + 1
           const roundTitle = (matchCount: number, round: number) => matchCount === 1
             ? 'Finale'
             : matchCount === 2 ? 'Semifinale'
@@ -469,13 +469,13 @@ function TournamentBoard({
                     ? participantName(match.playerOneSignupId)
                     : round === 1 ? '' : sourceMatches[0]?.winnerSignupId
                       ? participantName(sourceMatches[0].winnerSignupId)
-                      : `Vinner kamp ${index * 2 + 1}`
+                      : `Vinner kamp ${getMatchNumber(round - 1, index * 2)}`
                   const playerTwo = match?.playerTwoSignupId
                     ? participantName(match.playerTwoSignupId)
                     : match ? 'Walkover'
                       : round === 1 ? '' : sourceMatches[1]?.winnerSignupId
                         ? participantName(sourceMatches[1].winnerSignupId)
-                        : `Vinner kamp ${index * 2 + 2}`
+                        : `Vinner kamp ${getMatchNumber(round - 1, index * 2 + 1)}`
                   const refereeSignupId = match ? getTournamentMatchRefereeSignupId(tournament, match) : null
                   const refereeName = refereeSignupId ? participantName(refereeSignupId) : 'Ikke tildelt'
                   const rowStart = 1 + index * 2 ** (roundIndex + 1)
@@ -483,7 +483,7 @@ function TournamentBoard({
                   return <div className="tournament-print-bracket-match" key={match?.id ?? `cup-${round}-${index}`} style={{
                     gridColumn: roundIndex + 1,
                     gridRow: `${rowStart} / span ${rowSpan}`,
-                  }}>
+                  }} data-match-number={getMatchNumber(round, index)}>
                     <span>{playerOne}</span><span>{match?.playerOneLegs ?? ''}</span>
                     <span>{playerTwo}</span><span>{match?.playerTwoLegs ?? ''}</span>
                     <span className="tournament-print-bracket-referee">Dommer: {refereeName}</span>
