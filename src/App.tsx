@@ -5,7 +5,7 @@ import { addAdminGuestSignup, addTournamentCupRound, beginGuestSession, deleteAl
 import type { ClubAdmin, ClubDocument, ClubSignup, ClubTournament, PendingSyncIssue, SavedData, TournamentGameHistory, TournamentMatch, TournamentMatchProgress, TournamentGamePlayer } from './database'
 import { supabase } from './supabase'
 import type { Session } from '@supabase/supabase-js'
-import { summarizePlayer } from './stats'
+import { summarizePlayer, summarizeTournamentPlayer } from './stats'
 import { applyCricketVisit, CRICKET_TARGETS, hasWonCricket } from './cricket'
 import type { CricketDart, CricketMarks } from './cricket'
 import { createNextCupRound, drawClubPools, getNextQueuedTournamentMatch, getPoolStandings, getTournamentMatchRefereeSignupId, setTournamentAdvancement } from './tournament'
@@ -168,6 +168,27 @@ function TournamentBoard({
   const tournamentFinished = tournament?.cupRound
     && cupRoundMatches.length === 1
     && cupRoundMatches[0].winnerSignupId !== null
+  const tournamentPlayerStats = new Map<string, {
+    tons: number
+    oneEighties: number
+    fastestCheckoutDarts: number | null
+    highestCheckout: number
+  }>()
+  for (const match of tournament?.matches ?? []) {
+    for (const stats of match.playerStats ?? []) {
+      const previous = tournamentPlayerStats.get(stats.signupId)
+      tournamentPlayerStats.set(stats.signupId, {
+        tons: (previous?.tons ?? 0) + stats.tons,
+        oneEighties: (previous?.oneEighties ?? 0) + stats.oneEighties,
+        fastestCheckoutDarts: stats.fastestCheckoutDarts === null
+          ? previous?.fastestCheckoutDarts ?? null
+          : previous?.fastestCheckoutDarts === null || previous?.fastestCheckoutDarts === undefined
+            ? stats.fastestCheckoutDarts
+            : Math.min(previous.fastestCheckoutDarts, stats.fastestCheckoutDarts),
+        highestCheckout: Math.max(previous?.highestCheckout ?? 0, stats.highestCheckout),
+      })
+    }
+  }
   const participantName = (signupId: string) => tournament?.participants.find((participant) => participant.signupId === signupId)?.playerName ?? 'Ukjent spiller'
   const getRoundLabel = (round: number, matchesInRound: number) => matchesInRound === 1
     ? 'Finale'
@@ -434,6 +455,22 @@ function TournamentBoard({
             </div>
           </section>
         })}
+        <section className="tournament-print-sheet tournament-print-stats" key="print-player-statistics">
+          <div className="tournament-print-pool-heading"><h2>Turneringsstatistikk</h2><p>{formatClubDate(tournament.eventDate)}</p></div>
+          <p className="tournament-print-stats-note">Statistikken fylles inn automatisk når turneringskampene lagres. Raskeste checkout måles i spillerens piler.</p>
+          <table className="tournament-print-statistics">
+            <thead><tr><th>#</th><th>Spiller</th><th>Pulje</th><th>Tons (100+)</th><th>180-ere</th><th>Raskeste legg (piler)</th><th>Høyeste utgang</th></tr></thead>
+            <tbody>{tournament.participants.map((participant, index) => <tr key={participant.signupId}>
+              <td>{index + 1}</td>
+              <th scope="row">{participant.playerName}</th>
+              <td>{participant.poolNumber ?? ''}</td>
+              <td>{tournamentPlayerStats.get(participant.signupId)?.tons ?? 0}</td>
+              <td>{tournamentPlayerStats.get(participant.signupId)?.oneEighties ?? 0}</td>
+              <td>{tournamentPlayerStats.get(participant.signupId)?.fastestCheckoutDarts ?? '–'}</td>
+              <td>{(tournamentPlayerStats.get(participant.signupId)?.highestCheckout ?? 0) || '–'}</td>
+            </tr>)}</tbody>
+          </table>
+        </section>
         {cupMatches.length > 0 && (() => {
           const firstRoundMatches = cupMatches.filter((match) => match.roundNumber === 1)
             .sort((first, second) => first.bracketPosition - second.bracketPosition)
@@ -1451,7 +1488,7 @@ function App() {
       } else if (!guestName) {
         setEmailReportMessage('E-postrapport krever Supabase-innlogging.')
       }
-      if (activeTournamentMatch) void saveFinishedTournamentMatch(activeTournamentMatch, nextLegsWon)
+      if (activeTournamentMatch) void saveFinishedTournamentMatch(activeTournamentMatch, nextLegsWon, completedPlayers)
     } else {
       persistCurrentTournamentProgress({
         players: completedPlayers,
@@ -2138,6 +2175,7 @@ function App() {
   async function saveFinishedTournamentMatch(
     activeMatch: ActiveTournamentMatch,
     completedLegs: Record<string, number>,
+    completedPlayers: Player[],
   ) {
     await tournamentProgressSaveQueue.current
     if (!isClubAdmin) {
@@ -2160,6 +2198,20 @@ function App() {
       setTournamentMatchMessage('Kampens leggresultat mangler. Turneringsresultatet er ikke lagret.')
       return
     }
+    if (!match.playerTwoSignupId) {
+      setTournamentMatchMessage('Kampens spillerliste er ugyldig. Turneringsresultatet er ikke lagret.')
+      return
+    }
+    const playerOne = completedPlayers.find((player) => player.id === activeMatch.playerOneId)
+    const playerTwo = completedPlayers.find((player) => player.id === activeMatch.playerTwoId)
+    if (!playerOne || !playerTwo) {
+      setTournamentMatchMessage('Kampens spillerstatistikk mangler. Turneringsresultatet er ikke lagret.')
+      return
+    }
+    const playerStats = [
+      summarizeTournamentPlayer(match.playerOneSignupId, playerOne.visits),
+      summarizeTournamentPlayer(match.playerTwoSignupId, playerTwo.visits),
+    ]
     setTournamentBusy(true)
     setTournamentMessage('')
     setTournamentMessageIsError(false)
@@ -2171,6 +2223,7 @@ function App() {
         activeMatch.progressId,
         playerOneLegs,
         playerTwoLegs,
+        playerStats,
       )
       if (match.phase === 'cup') {
         const currentRoundMatches = updatedTournament.matches.filter((item) =>
@@ -2387,7 +2440,7 @@ function App() {
 
   function retryTournamentMatchSave() {
     if (activeTournamentMatch && matchWinnerId) {
-      void saveFinishedTournamentMatch(activeTournamentMatch, legsWon)
+      void saveFinishedTournamentMatch(activeTournamentMatch, legsWon, players)
     }
   }
 

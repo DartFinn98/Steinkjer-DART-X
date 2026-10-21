@@ -375,6 +375,8 @@ create policy "Club admins can manage tournaments"
 
 grant select, insert, update, delete on public.club_tournaments to authenticated;
 
+drop function if exists public.update_club_tournament_match(date, text, text, jsonb, text, integer, integer);
+
 create or replace function public.update_club_tournament_match(
   target_event_date date,
   target_match_id text,
@@ -382,7 +384,8 @@ create or replace function public.update_club_tournament_match(
   progress jsonb default null,
   progress_id text default null,
   player_one_legs integer default null,
-  player_two_legs integer default null
+  player_two_legs integer default null,
+  player_stats jsonb default null
 )
 returns public.club_tournaments
 language plpgsql
@@ -395,6 +398,7 @@ declare
   current_position integer;
   legs_to_win integer;
   winner_signup_id text;
+  player_stat record;
 begin
   if not public.is_club_admin() then
     raise exception 'Administrator access required' using errcode = '42501';
@@ -446,6 +450,35 @@ begin
       and (match_data #>> '{inProgress,progressId}') <> coalesce(progress_id, '') then
       raise exception 'Turneringskampen er startet på en annen bane.';
     end if;
+    if jsonb_typeof(player_stats) is distinct from 'array' then
+      raise exception 'Turneringskampens spillerstatistikk mangler eller er ugyldig.';
+    end if;
+    if jsonb_array_length(player_stats) <> 2 then
+      raise exception 'Turneringskampens spillerstatistikk mangler eller er ugyldig.';
+    end if;
+    for player_stat in
+      select value from jsonb_array_elements(player_stats) as stats(value)
+    loop
+      if coalesce(player_stat.value ->> 'signupId', '') not in (
+        match_data ->> 'playerOneSignupId',
+        match_data ->> 'playerTwoSignupId'
+      )
+        or coalesce(player_stat.value ->> 'tons', '') !~ '^[0-9]+$'
+        or coalesce(player_stat.value ->> 'oneEighties', '') !~ '^[0-9]+$'
+        or coalesce(player_stat.value ->> 'highestCheckout', '') !~ '^[0-9]+$'
+        or (
+          coalesce(player_stat.value -> 'fastestCheckoutDarts', 'null'::jsonb) <> 'null'::jsonb
+          and coalesce(player_stat.value ->> 'fastestCheckoutDarts', '') !~ '^[1-9][0-9]*$'
+        ) then
+        raise exception 'Turneringskampens spillerstatistikk er ugyldig.';
+      end if;
+    end loop;
+    if (
+      select count(distinct value ->> 'signupId')
+      from jsonb_array_elements(player_stats) as stats(value)
+    ) <> 2 then
+      raise exception 'Turneringskampens spillerstatistikk må inneholde begge spillerne.';
+    end if;
     legs_to_win := (match_data ->> 'bestOfLegs')::integer / 2 + 1;
     if player_one_legs is null
       or player_two_legs is null
@@ -464,7 +497,8 @@ begin
     match_data := (match_data - 'inProgress') || jsonb_build_object(
       'playerOneLegs', player_one_legs,
       'playerTwoLegs', player_two_legs,
-      'winnerSignupId', winner_signup_id
+      'winnerSignupId', winner_signup_id,
+      'playerStats', player_stats
     );
   else
     raise exception 'Ukjent handling for turneringskamp.';
@@ -625,10 +659,10 @@ begin
 end;
 $$;
 
-revoke all on function public.update_club_tournament_match(date, text, text, jsonb, text, integer, integer) from public;
+revoke all on function public.update_club_tournament_match(date, text, text, jsonb, text, integer, integer, jsonb) from public;
 revoke all on function public.add_club_tournament_cup_round(date, smallint, jsonb) from public;
 revoke all on function public.update_club_tournament_participant_availability(date, text, text) from public;
-grant execute on function public.update_club_tournament_match(date, text, text, jsonb, text, integer, integer) to authenticated;
+grant execute on function public.update_club_tournament_match(date, text, text, jsonb, text, integer, integer, jsonb) to authenticated;
 grant execute on function public.add_club_tournament_cup_round(date, smallint, jsonb) to authenticated;
 grant execute on function public.update_club_tournament_participant_availability(date, text, text) to authenticated;
 

@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { PlayerMatchStats } from './stats'
+import type { PlayerMatchStats, TournamentPlayerMatchStats } from './stats'
 import type { CricketDart, CricketMarks } from './cricket'
 
 export type SavedPlayer = {
@@ -103,6 +103,7 @@ export type TournamentMatch = {
   winnerSignupId: string | null
   refereeSignupId?: string
   bestOfLegs: 3 | 5 | 7 | 9
+  playerStats?: TournamentPlayerMatchStats[]
   inProgress?: TournamentMatchProgress
 }
 
@@ -715,6 +716,7 @@ async function updateTournamentMatch(
     progress_id?: string
     player_one_legs?: number
     player_two_legs?: number
+    player_stats?: TournamentPlayerMatchStats[]
   },
 ): Promise<ClubTournament> {
   if (!supabase) throw new Error('Supabase er ikke konfigurert.')
@@ -745,6 +747,7 @@ export function finishTournamentMatch(
   progressId: string,
   playerOneLegs: number,
   playerTwoLegs: number,
+  playerStats: TournamentPlayerMatchStats[],
 ): Promise<ClubTournament> {
   return updateTournamentMatch({
     target_event_date: eventDate,
@@ -753,6 +756,7 @@ export function finishTournamentMatch(
     progress_id: progressId,
     player_one_legs: playerOneLegs,
     player_two_legs: playerTwoLegs,
+    player_stats: playerStats,
   })
 }
 

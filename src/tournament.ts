@@ -48,7 +48,7 @@ export function drawClubPools(
   const uniqueSeeds = Array.from(seedRanks.values())
   if (new Set(uniqueSeeds).size !== uniqueSeeds.length) throw new Error('Hvert seedingsnummer må være unikt.')
 
-  const poolCount = Math.ceil(signups.length / 8)
+  const poolCount = Math.ceil(signups.length / 4)
   const poolSizes = Array.from({ length: poolCount }, (_, index) =>
     Math.floor(signups.length / poolCount) + (index < signups.length % poolCount ? 1 : 0))
   const participants: TournamentParticipant[] = signups.map((signup) => ({

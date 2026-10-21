@@ -23,6 +23,14 @@ export type PlayerMatchStats = {
   visits: VisitForStats[]
 }
 
+export type TournamentPlayerMatchStats = {
+  signupId: string
+  tons: number
+  oneEighties: number
+  fastestCheckoutDarts: number | null
+  highestCheckout: number
+}
+
 type PlayerForStats = {
   id: string
   name: string
@@ -58,5 +66,16 @@ export function summarizePlayer(player: PlayerForStats, legsWon: number): Player
     highestVisit: Math.max(0, ...player.visits.filter((visit) => !visit.bust).map((visit) => visit.total)),
     fastestCheckoutDarts,
     visits: player.visits,
+  }
+}
+
+export function summarizeTournamentPlayer(signupId: string, visits: VisitForStats[]): TournamentPlayerMatchStats {
+  const matchStats = summarizePlayer({ id: signupId, name: '', score: 501, visits }, 0)
+  return {
+    signupId,
+    tons: matchStats.tons,
+    oneEighties: matchStats.oneEighties,
+    fastestCheckoutDarts: matchStats.fastestCheckoutDarts,
+    highestCheckout: Math.max(0, ...visits.filter((visit) => !visit.bust && visit.checkout).map((visit) => visit.total)),
   }
 }
