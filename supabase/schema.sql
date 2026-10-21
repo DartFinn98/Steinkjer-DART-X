@@ -433,6 +433,18 @@ begin
       or coalesce(progress ->> 'progressId', '') = '' then
       raise exception 'Ugyldig kampframdrift.';
     end if;
+    if coalesce(progress ->> 'courtNumber', '') <> ''
+      and (
+        (progress ->> 'courtNumber') !~ '^[1-5]$'
+        or exists (
+          select 1
+          from jsonb_array_elements(tournament_row.matches) as active_match(value)
+          where active_match.value ->> 'id' <> target_match_id
+            and active_match.value #>> '{inProgress,courtNumber}' = (progress ->> 'courtNumber')
+        )
+      ) then
+      raise exception 'Denne banen er allerede tildelt en pågående kamp.';
+    end if;
     if not (match_data ? 'inProgress') and (
       select count(*)
       from jsonb_array_elements(tournament_row.matches) as active_match(value)

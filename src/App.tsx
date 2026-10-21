@@ -161,9 +161,6 @@ function TournamentBoard({
   const activeMatches = tournament?.matches.filter((match) => match.inProgress) ?? []
   const assignedBoards = new Set(activeMatches.flatMap((match) => match.inProgress?.courtNumber ? [match.inProgress.courtNumber] : []))
   const unassignedActiveMatches = activeMatches.filter((match) => !match.inProgress?.courtNumber)
-  const freeBoards = unassignedActiveMatches.length === 0
-    ? ([1, 2, 3, 4, 5] as const).filter((court) => !assignedBoards.has(court))
-    : []
   const poolsComplete = poolMatches.length > 0 && poolMatches.every((match) => match.winnerSignupId !== null)
   const cupMatches = tournament?.matches.filter((match) => match.phase === 'cup') ?? []
   const cupRoundMatches = tournament && cupMatches.length > 0
@@ -204,6 +201,11 @@ function TournamentBoard({
   const activeSignupIds = new Set(activeMatches.flatMap((match) => [match.playerOneSignupId, match.playerTwoSignupId].filter((id): id is string => id !== null)))
   const matchesPlayed = new Map<string, number>()
   const participantById = new Map((tournament?.participants ?? []).map((participant) => [participant.signupId, participant]))
+  const isMatchCourtAvailable = (match: TournamentMatch) => {
+    if (!tournament) return false
+    const assignedCourt = getTournamentMatchCourtNumber(tournament, match)
+    return !activeMatches.some((activeMatch) => activeMatch.id !== match.id && activeMatch.inProgress?.courtNumber === assignedCourt)
+  }
   for (const match of currentRoundMatches) {
     if ((!match.winnerSignupId && !match.inProgress) || !match.playerTwoSignupId) continue
     matchesPlayed.set(match.playerOneSignupId, (matchesPlayed.get(match.playerOneSignupId) ?? 0) + 1)
@@ -223,6 +225,9 @@ function TournamentBoard({
       const secondReady = secondParticipants.every((participant) => (participant?.availability ?? 'ready') === 'ready')
         && !activeSignupIds.has(second.playerOneSignupId) && !activeSignupIds.has(second.playerTwoSignupId!)
       if (firstReady !== secondReady) return firstReady ? -1 : 1
+      const firstCourtAvailable = isMatchCourtAvailable(first)
+      const secondCourtAvailable = isMatchCourtAvailable(second)
+      if (firstCourtAvailable !== secondCourtAvailable) return firstCourtAvailable ? -1 : 1
       const readyTimestamp = (participant: typeof firstParticipants[number]) => Date.parse(participant?.readySince ?? tournament?.createdAt ?? '')
       const firstWaitStart = Math.max(...firstParticipants.map(readyTimestamp))
       const secondWaitStart = Math.max(...secondParticipants.map(readyTimestamp))
@@ -244,6 +249,7 @@ function TournamentBoard({
       && (second?.availability ?? 'ready') === 'ready'
       && !activeSignupIds.has(match.playerOneSignupId)
       && !activeSignupIds.has(match.playerTwoSignupId!)
+      && isMatchCourtAvailable(match)
   })
   const formatWaitTime = (readySince: string | undefined) => {
     const parsedTime = Date.parse(readySince ?? tournament?.createdAt ?? '')
@@ -311,13 +317,13 @@ function TournamentBoard({
               <small>Stillingen er {progressScore} legg</small>
               <small>{refereeName ? `Dommer: ${refereeName}` : 'Dommer ikke tildelt'}</small>
             </div>
-            {isAdmin && !progress.courtNumber && <label className="tournament-board-select"><span>TILDEL BANE</span><select disabled={busy} value="" onChange={(event) => { const selectedCourt = Number(event.target.value); if (isCourtNumber(selectedCourt)) onAssignBoard(match, selectedCourt) }}><option value="">Velg bane</option>{availableForAssignment.map((court) => <option key={court} value={court}>Bane {court}</option>)}</select></label>}
+            {isAdmin && !progress.courtNumber && <label className="tournament-board-select"><span>TILDEL BANE {getTournamentMatchCourtNumber(tournament, match)}</span><select disabled={busy || !availableForAssignment.includes(getTournamentMatchCourtNumber(tournament, match))} value="" onChange={(event) => { const selectedCourt = Number(event.target.value); if (isCourtNumber(selectedCourt)) onAssignBoard(match, selectedCourt) }}><option value="">{availableForAssignment.includes(getTournamentMatchCourtNumber(tournament, match)) ? 'Velg fast bane' : `Bane ${getTournamentMatchCourtNumber(tournament, match)} er opptatt`}</option>{availableForAssignment.filter((court) => court === getTournamentMatchCourtNumber(tournament, match)).map((court) => <option key={court} value={court}>Bane {court}</option>)}</select></label>}
             {isAdmin && progress.courtNumber && <button className="tournament-play-button" type="button" disabled={busy || !canResumeMatch} onClick={() => onPlayMatch(match)}>Fortsett på bane {progress.courtNumber}</button>}
           </li>
         })}</ul>}
         <div className="tournament-day-queue">
-          <div className="tournament-queue-heading"><h4>Smart kampflyt</h4><span>JEVN PAUSE · DU VELGER</span></div>
-          <p className="tournament-checkin-note">Spillerne er klare som standard. Bruk pause eller «Ikke møtt» bare når noen ikke skal foreslås til kamp.</p>
+          <div className="tournament-queue-heading"><h4>Smart kampflyt</h4><span>FASTE BANER PER PULJE</span></div>
+          <p className="tournament-checkin-note">Pulje 1–5 spiller på bane 1–5. Pulje 6 og videre fordeles på nytt fra bane 1. Cupkamper bruker banen til spilleren i første kampplassering.</p>
           <ul className="tournament-readiness-list" aria-label="Spillerklarhet">
             {(tournament?.participants ?? []).map((participant) => {
               const isPlaying = activeSignupIds.has(participant.signupId)
@@ -340,31 +346,40 @@ function TournamentBoard({
           </div>}
           <h4>Neste kamper · velg selv</h4>
           {queuedMatches.length > 0
-            ? <ol>{queuedMatches.map((match) => <li key={match.id}>
+            ? <ol>{queuedMatches.map((match) => {
+              const matchCourt = getTournamentMatchCourtNumber(tournament, match)
+              const matchCourtAvailable = isMatchCourtAvailable(match)
+              const playersBusy = activeSignupIds.has(match.playerOneSignupId) || activeSignupIds.has(match.playerTwoSignupId!)
+              const unavailablePlayer = [participantById.get(match.playerOneSignupId), participantById.get(match.playerTwoSignupId!)]
+                .find((participant) => participant?.availability === 'not-arrived' || participant?.availability === 'pause')
+              return <li key={match.id}>
               <span>
                 {match.phase === 'pool' ? `Pulje ${match.poolNumber}${poolMeetingLabel(match)}` : getRoundLabel(match.roundNumber, cupMatches.filter((item) => item.roundNumber === match.roundNumber).length)} · {participantName(match.playerOneSignupId)} – {participantName(match.playerTwoSignupId!)}
-                <small>{activeSignupIds.has(match.playerOneSignupId) || activeSignupIds.has(match.playerTwoSignupId!)
+                <small>Bane {matchCourt} · {playersBusy
                   ? 'Spiller opptatt på en annen bane'
-                  : [participantById.get(match.playerOneSignupId), participantById.get(match.playerTwoSignupId!)].find((participant) => participant?.availability === 'not-arrived')
-                    ? `${[participantById.get(match.playerOneSignupId), participantById.get(match.playerTwoSignupId!)].find((participant) => participant?.availability === 'not-arrived')?.playerName} er ikke sjekket inn`
-                    : [participantById.get(match.playerOneSignupId), participantById.get(match.playerTwoSignupId!)].find((participant) => participant?.availability === 'pause')
-                    ? `${[participantById.get(match.playerOneSignupId), participantById.get(match.playerTwoSignupId!)].find((participant) => participant?.availability === 'pause')?.playerName} har valgt pause`
+                  : unavailablePlayer?.availability === 'not-arrived'
+                    ? `${unavailablePlayer.playerName} er ikke sjekket inn`
+                    : unavailablePlayer?.availability === 'pause'
+                      ? `${unavailablePlayer.playerName} har valgt pause`
+                      : !matchCourtAvailable
+                        ? `Bane ${matchCourt} er opptatt`
                     : `${matchesPlayed.get(match.playerOneSignupId) ?? 0}–${matchesPlayed.get(match.playerTwoSignupId!) ?? 0} kamper spilt i runden`}</small>
                 <small>{getTournamentMatchRefereeSignupId(tournament, match)
                   ? `Dommer: ${participantName(getTournamentMatchRefereeSignupId(tournament, match)!)}`
                   : 'Dommer ikke tildelt'}</small>
               </span>
-              {isAdmin && <button className={`tournament-play-button${recommendedMatch?.id === match.id ? ' is-recommended' : ''}`} type="button" disabled={busy || !canStartQueuedMatches || freeBoards.length === 0 || activeSignupIds.has(match.playerOneSignupId) || activeSignupIds.has(match.playerTwoSignupId!) || (participantById.get(match.playerOneSignupId)?.availability !== undefined && participantById.get(match.playerOneSignupId)?.availability !== 'ready') || (participantById.get(match.playerTwoSignupId!)?.availability !== undefined && participantById.get(match.playerTwoSignupId!)?.availability !== 'ready')} onClick={() => onPlayMatch(match)}>{unassignedActiveMatches.length > 0 ? 'Tildel aktive baner først' : activeSignupIds.has(match.playerOneSignupId) || activeSignupIds.has(match.playerTwoSignupId!) ? 'Spiller opptatt' : (participantById.get(match.playerOneSignupId)?.availability !== undefined && participantById.get(match.playerOneSignupId)?.availability !== 'ready') || (participantById.get(match.playerTwoSignupId!)?.availability !== undefined && participantById.get(match.playerTwoSignupId!)?.availability !== 'ready') ? 'Sjekk at begge er klare' : freeBoards.length > 0 ? `Start på bane ${freeBoards[0]}` : 'Alle baner er i bruk'}</button>}
-            </li>)}</ol>
+              {isAdmin && <button className={`tournament-play-button${recommendedMatch?.id === match.id ? ' is-recommended' : ''}`} type="button" disabled={busy || !canStartQueuedMatches || !matchCourtAvailable || playersBusy || (participantById.get(match.playerOneSignupId)?.availability !== undefined && participantById.get(match.playerOneSignupId)?.availability !== 'ready') || (participantById.get(match.playerTwoSignupId!)?.availability !== undefined && participantById.get(match.playerTwoSignupId!)?.availability !== 'ready')} onClick={() => onPlayMatch(match)}>{unassignedActiveMatches.length > 0 ? 'Tildel aktive baner først' : playersBusy ? 'Spiller opptatt' : !matchCourtAvailable ? `Bane ${matchCourt} er opptatt` : unavailablePlayer ? 'Sjekk spillerstatus' : `Start på bane ${matchCourt}`}</button>}
+            </li>
+            })}</ol>
             : <p>{tournamentFinished ? 'Turneringen er ferdig.' : 'Ingen flere kamper venter i denne runden.'}</p>}
-          {queuedMatches.length > 0 && !recommendedMatch && <p>Ingen kamp har to ledige spillere som er markert klare akkurat nå. Oppdater spillerstatus når de er klare.</p>}
+          {queuedMatches.length > 0 && !recommendedMatch && <p>Ingen kamp kan starte akkurat nå. Sjekk spillerstatus, vent til kampens faste bane blir ledig, eller avslutt pågående kamp.</p>}
         </div>
       </section>
       {tournamentPools.map((poolNumber) => {
         const standings = getPoolStandings(tournament, poolNumber)
         const poolIsComplete = poolMatches.filter((match) => match.poolNumber === poolNumber).every((match) => match.winnerSignupId !== null)
         return <section className="tournament-pool" key={poolNumber}>
-          <h3>Pulje {poolNumber}<span>{standings.length} spillere</span></h3>
+          <h3>Pulje {poolNumber}<span>{standings.length} spillere · Bane {(poolNumber - 1) % 5 + 1}</span></h3>
           <div className="tournament-table-wrap"><table className="tournament-standings"><thead><tr><th>#</th><th>Spiller</th><th>Seire</th><th>Leggdifferanse</th>{isAdmin && tournament.cupRound === 0 && <th>Videre</th>}</tr></thead><tbody>{standings.map((participant, index) => <tr key={participant.signupId}>
             <td>{index + 1}</td><th scope="row">{participant.playerName}{participant.seed !== null && <small>Seed {participant.seed}</small>}</th><td>{participant.wins}</td><td>{participant.legDifference > 0 ? `+${participant.legDifference}` : participant.legDifference}</td>
             {isAdmin && tournament.cupRound === 0 && <td><input type="checkbox" aria-label={`${participant.playerName} går videre`} checked={participant.advances} disabled={!poolIsComplete || busy} onChange={(event) => onToggleAdvancement(participant.signupId, event.target.checked)} /></td>}
@@ -797,6 +812,15 @@ function formatDocumentSize(size: number): string {
 
 function isCourtNumber(value: number): value is CourtNumber {
   return Number.isInteger(value) && value >= 1 && value <= 5
+}
+
+function getTournamentMatchCourtNumber(tournament: ClubTournament, match: TournamentMatch): CourtNumber {
+  const playerOnePool = tournament.participants.find((participant) => participant.signupId === match.playerOneSignupId)?.poolNumber
+  const playerTwoPool = match.playerTwoSignupId
+    ? tournament.participants.find((participant) => participant.signupId === match.playerTwoSignupId)?.poolNumber
+    : null
+  const poolNumber = match.phase === 'pool' ? match.poolNumber : playerOnePool ?? playerTwoPool
+  return poolNumber && poolNumber > 0 ? ((poolNumber - 1) % 5 + 1) as CourtNumber : 1
 }
 
 function App() {
@@ -2114,6 +2138,11 @@ function App() {
 
   async function assignTournamentBoard(match: TournamentMatch, assignedCourt: CourtNumber) {
     if (!isClubAdmin || !selectedTournament || !match.inProgress) return
+    const fixedCourt = getTournamentMatchCourtNumber(selectedTournament, match)
+    if (assignedCourt !== fixedCourt) {
+      showTournamentError(`Denne kampen skal spilles på bane ${fixedCourt}.`)
+      return
+    }
     if (selectedTournament.matches.some((item) => item.id !== match.id && item.inProgress?.courtNumber === assignedCourt)) {
       showTournamentError(`Bane ${assignedCourt} er allerede tildelt en pågående kamp.`)
       return
@@ -2378,10 +2407,9 @@ function App() {
       return
     }
     const occupiedCourts = new Set(tournament.matches.flatMap((item) => item.inProgress?.courtNumber ? [item.inProgress.courtNumber] : []))
-    const availableCourts = ([1, 2, 3, 4, 5] as const).filter((court) => !occupiedCourts.has(court))
-    const assignedCourt = availableCourts.includes(courtNumber) ? courtNumber : availableCourts[0]
-    if (!assignedCourt) {
-      const errorMessage = 'Alle fem banene er i bruk. Vent til en kamp er ferdig.'
+    const assignedCourt = getTournamentMatchCourtNumber(tournament, match)
+    if (occupiedCourts.has(assignedCourt)) {
+      const errorMessage = `Bane ${assignedCourt} er opptatt. Vent til kampen der er ferdig før du starter denne.`
       showTournamentError(errorMessage)
       if (tournamentOverride) setTournamentMatchMessage(errorMessage)
       return
