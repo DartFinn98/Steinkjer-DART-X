@@ -885,10 +885,6 @@ function App() {
   const [clubAdmins, setClubAdmins] = useState<ClubAdmin[]>([])
   const [adminEmail, setAdminEmail] = useState('')
   const [adminRoleBusy, setAdminRoleBusy] = useState(false)
-  const [adminNewPlayerName, setAdminNewPlayerName] = useState('')
-  const [adminPlayersBusy, setAdminPlayersBusy] = useState(false)
-  const [adminPlayersMessage, setAdminPlayersMessage] = useState('')
-  const [adminPlayersMessageIsError, setAdminPlayersMessageIsError] = useState(false)
   const [clubTournaments, setClubTournaments] = useState<ClubTournament[]>([])
   const clubTournamentsRef = useRef<ClubTournament[]>([])
   const autoCupAttemptedRef = useRef('')
@@ -2007,36 +2003,6 @@ function App() {
     }
   }
 
-  async function addAdminPlayer() {
-    const name = adminNewPlayerName.trim()
-    if (!name || adminPlayersBusy) return
-    if (name.length > 24) {
-      setAdminPlayersMessage('Spillernavnet kan ikke være lengre enn 24 tegn.')
-      setAdminPlayersMessageIsError(true)
-      return
-    }
-    if (savedData.players.some((player) => player.name.toLocaleLowerCase('nb-NO') === name.toLocaleLowerCase('nb-NO'))) {
-      setAdminPlayersMessage('Spilleren finnes allerede i spillerlisten.')
-      setAdminPlayersMessageIsError(true)
-      return
-    }
-
-    setAdminPlayersBusy(true)
-    setAdminPlayersMessage('')
-    setAdminPlayersMessageIsError(false)
-    try {
-      await savePlayers([name])
-      setSavedData(await loadSavedData())
-      setAdminNewPlayerName('')
-      setAdminPlayersMessage(`${name} er lagt til i spillerlisten.`)
-    } catch (error) {
-      setAdminPlayersMessage(error instanceof Error ? error.message : 'Spilleren kunne ikke legges til.')
-      setAdminPlayersMessageIsError(true)
-    } finally {
-      setAdminPlayersBusy(false)
-    }
-  }
-
   async function uploadAdminDocuments(files: File[]) {
     if (files.length === 0) return
     setAdminDocumentsBusy(true)
@@ -2744,14 +2710,6 @@ function App() {
                 })}</ul> : <p className="admin-empty">Ingen er påmeldt ennå. Legg til en gjest ovenfor ved behov.</p>}
               </section>
             })}
-          </section>
-          <section className="admin-panel admin-players-panel">
-            <div><p className="eyebrow">SPILLERLISTE</p><h2>Legg til spiller manuelt</h2><p>Legg inn spillere som ikke har registrert en konto. De blir tilgjengelige i spillerlisten når kamper settes opp.</p></div>
-            <form className="admin-role-form" onSubmit={(event) => { event.preventDefault(); void addAdminPlayer() }}>
-              <label><span>SPILLERNAVN</span><input autoComplete="off" maxLength={24} required value={adminNewPlayerName} onChange={(event) => { setAdminNewPlayerName(event.target.value); setAdminPlayersMessage('') }} placeholder="Skriv inn spillernavn" /></label>
-              <button className="primary-button" type="submit" disabled={adminPlayersBusy || !adminNewPlayerName.trim()}>{adminPlayersBusy ? 'LAGRER …' : 'Legg til spiller'}</button>
-            </form>
-            {adminPlayersMessage && <p className={`admin-message${adminPlayersMessageIsError ? ' is-error' : ''}`} role={adminPlayersMessageIsError ? 'alert' : 'status'}>{adminPlayersMessage}</p>}
           </section>
           <section className="admin-panel admin-documents-panel">
             <div className="admin-section-heading">
