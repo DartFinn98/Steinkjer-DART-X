@@ -423,11 +423,11 @@ begin
   end if;
 
   match_data := tournament_row.matches -> match_position;
-  if (match_data ->> 'winnerSignupId') is not null then
-    raise exception 'Turneringskampen er allerede avgjort.';
-  end if;
 
   if operation = 'save-progress' then
+    if (match_data ->> 'winnerSignupId') is not null then
+      raise exception 'Turneringskampen er allerede avgjort.';
+    end if;
     if jsonb_typeof(progress) <> 'object'
       or jsonb_array_length(coalesce(progress -> 'players', '[]'::jsonb)) <> 2
       or coalesce(progress ->> 'progressId', '') = '' then
@@ -446,6 +446,9 @@ begin
     end if;
     match_data := jsonb_set(match_data, '{inProgress}', progress, true);
   elsif operation = 'finish-match' then
+    if (match_data ->> 'winnerSignupId') is not null then
+      raise exception 'Turneringskampen er allerede avgjort.';
+    end if;
     if coalesce(match_data #>> '{inProgress,progressId}', '') <> ''
       and (match_data #>> '{inProgress,progressId}') <> coalesce(progress_id, '') then
       raise exception 'Turneringskampen er startet på en annen bane.';
@@ -500,6 +503,70 @@ begin
       'winnerSignupId', winner_signup_id,
       'playerStats', player_stats
     );
+  elsif operation = 'edit-result' then
+    if (match_data ->> 'winnerSignupId') is null
+      or match_data ->> 'playerTwoSignupId' is null then
+      raise exception 'Kampen har ikke et resultat som kan endres.';
+    end if;
+    if (
+      (match_data ->> 'phase' = 'pool' and tournament_row.cup_round > 0)
+      or (
+        match_data ->> 'phase' = 'cup'
+        and exists (
+          select 1
+          from jsonb_array_elements(tournament_row.matches) as later_match(value)
+          where later_match.value ->> 'phase' = 'cup'
+            and (later_match.value ->> 'roundNumber')::integer > (match_data ->> 'roundNumber')::integer
+        )
+      )
+    ) then
+      raise exception 'Resultatet kan ikke endres etter at neste cupfase er startet.';
+    end if;
+    legs_to_win := (match_data ->> 'bestOfLegs')::integer / 2 + 1;
+    if player_one_legs is null
+      or player_two_legs is null
+      or player_one_legs < 0
+      or player_two_legs < 0
+      or player_one_legs > legs_to_win
+      or player_two_legs > legs_to_win
+      or player_one_legs = player_two_legs
+      or greatest(player_one_legs, player_two_legs) <> legs_to_win then
+      raise exception 'Ugyldig turneringsresultat.';
+    end if;
+    winner_signup_id := case
+      when player_one_legs > player_two_legs then match_data ->> 'playerOneSignupId'
+      else match_data ->> 'playerTwoSignupId'
+    end;
+    match_data := match_data || jsonb_build_object(
+      'playerOneLegs', player_one_legs,
+      'playerTwoLegs', player_two_legs,
+      'winnerSignupId', winner_signup_id
+    );
+  elsif operation = 'undo-result' then
+    if (match_data ->> 'winnerSignupId') is null
+      or match_data ->> 'playerTwoSignupId' is null then
+      raise exception 'Kampen har ikke et resultat som kan angres.';
+    end if;
+    if (
+      (match_data ->> 'phase' = 'pool' and tournament_row.cup_round > 0)
+      or (
+        match_data ->> 'phase' = 'cup'
+        and exists (
+          select 1
+          from jsonb_array_elements(tournament_row.matches) as later_match(value)
+          where later_match.value ->> 'phase' = 'cup'
+            and (later_match.value ->> 'roundNumber')::integer > (match_data ->> 'roundNumber')::integer
+        )
+      )
+    ) then
+      raise exception 'Resultatet kan ikke angres etter at neste cupfase er startet.';
+    end if;
+    match_data := (match_data - 'playerStats')
+      || jsonb_build_object(
+        'playerOneLegs', null,
+        'playerTwoLegs', null,
+        'winnerSignupId', null
+      );
   else
     raise exception 'Ukjent handling for turneringskamp.';
   end if;

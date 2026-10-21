@@ -206,6 +206,19 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .tournament-play-button.is-recommended { box-shadow: 0 0 0 2px #175c4520; }
 .tournament-play-button:disabled { cursor: wait; opacity: .6; }
 .tournament-match-result { max-width: 45%; color: var(--green); font-size: 11px; text-align: right; overflow-wrap: anywhere; }
+.tournament-result-actions { min-width: min(45%, 250px); display: grid; justify-items: end; gap: 7px; }
+.tournament-result-controls { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.tournament-result-controls button, .tournament-result-edit button, .tournament-result-confirm button { min-height: 32px; padding: 0 9px; border: 1px solid var(--line); background: transparent; color: var(--green); font-size: 10px; cursor: pointer; }
+.tournament-result-controls button:hover, .tournament-result-edit button:hover, .tournament-result-confirm button:hover { border-color: var(--green); }
+.tournament-result-edit { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; text-align: left; }
+.tournament-result-edit label { min-width: 0; display: grid; gap: 4px; }
+.tournament-result-edit label span, .tournament-result-edit > small { overflow-wrap: anywhere; color: var(--muted); font-size: 9px; }
+.tournament-result-edit > .tournament-result-edit-error { color: #b24029; }
+.tournament-result-edit input { width: 100%; min-width: 0; height: 36px; padding: 0 8px; border: 1px solid var(--line); background: #fffefa; color: var(--green); font: 15px var(--mono); }
+.tournament-result-edit > small, .tournament-result-edit > div { grid-column: 1 / -1; }
+.tournament-result-edit > div { display: flex; gap: 6px; }
+.tournament-result-confirm { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
+.tournament-result-confirm span, .tournament-result-locked { color: var(--muted); font-size: 9px; }
 .tournament-match-pending { color: var(--muted); font-size: 10px; }
 .tournament-resume-status { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -8px 0 0; color: var(--green); font-size: 11px; line-height: 1.5; }
 .tournament-resume-status.is-error { color: #9b452f; }
@@ -668,6 +681,9 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
   .tournament-archive li > .tournament-archive-actions { width: 100%; }
   .tournament-archive-actions button { flex: 1; }
   .tournament-match-result { max-width: none; text-align: left; }
+  .tournament-result-actions { width: 100%; min-width: 0; justify-items: stretch; }
+  .tournament-result-controls { justify-content: flex-start; }
+  .tournament-result-confirm { justify-content: flex-start; }
   .tournament-play-button { width: 100%; }
   .tournament-actions { align-items: stretch; flex-direction: column; }
   .tournament-actions .primary-button { width: 100%; }

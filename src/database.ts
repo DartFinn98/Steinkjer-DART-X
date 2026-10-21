@@ -712,7 +712,7 @@ async function updateTournamentMatch(
   args: {
     target_event_date: string
     target_match_id: string
-    operation: 'save-progress' | 'finish-match'
+    operation: 'save-progress' | 'finish-match' | 'edit-result' | 'undo-result'
     progress?: TournamentMatchProgress
     progress_id?: string
     player_one_legs?: number
@@ -758,6 +758,29 @@ export function finishTournamentMatch(
     player_one_legs: playerOneLegs,
     player_two_legs: playerTwoLegs,
     player_stats: playerStats,
+  })
+}
+
+export function editFinishedTournamentMatch(
+  eventDate: string,
+  matchId: string,
+  playerOneLegs: number,
+  playerTwoLegs: number,
+): Promise<ClubTournament> {
+  return updateTournamentMatch({
+    target_event_date: eventDate,
+    target_match_id: matchId,
+    operation: 'edit-result',
+    player_one_legs: playerOneLegs,
+    player_two_legs: playerTwoLegs,
+  })
+}
+
+export function undoFinishedTournamentMatch(eventDate: string, matchId: string): Promise<ClubTournament> {
+  return updateTournamentMatch({
+    target_event_date: eventDate,
+    target_match_id: matchId,
+    operation: 'undo-result',
   })
 }
 
