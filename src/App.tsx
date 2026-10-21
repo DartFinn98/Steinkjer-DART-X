@@ -269,7 +269,7 @@ function TournamentBoard({
     </div>
     {message && <p className={`admin-message${messageIsError ? ' is-error' : ''}`} role={messageIsError ? 'alert' : 'status'}>{message}</p>}
     {!tournament ? <div className="tournament-draw">
-      <p className="admin-empty">{signups.length} påmeldte. Velg eventuelle seedede spillere før du trekker. Seedede plasseres først i ulike puljer; de øvrige fordeles tilfeldig og jevnt. Puljene har maks fire spillere.</p>
+      <p className="admin-empty">{signups.length} påmeldte. Velg eventuelle seedede spillere før du trekker. Seedede plasseres først i ulike puljer; de øvrige fordeles tilfeldig og jevnt.</p>
       {isAdmin && signups.length > 0 && <ul className="tournament-seed-list">{signups.map((signup) => {
         const currentSeed = seedRanks[signup.id] ?? ''
         const takenSeeds = new Set(Object.entries(seedRanks).filter(([id, rank]) => id !== signup.id && rank).map(([, rank]) => rank))
