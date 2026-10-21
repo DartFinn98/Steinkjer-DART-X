@@ -159,17 +159,92 @@ export function setTournamentAdvancement(tournament: ClubTournament, advancesIds
     ...participant,
     advances: advancesIds.has(participant.signupId),
   }))
-  const cupParticipants = shuffle(participants.filter((participant) => participant.advances && participant.seed === null))
-  const seededCupParticipants = participants.filter((participant) => participant.advances && participant.seed !== null)
-    .sort((first, second) => first.seed! - second.seed!)
-  const entries = [...seededCupParticipants, ...cupParticipants]
+  const standingsByPool = new Map<number, ReturnType<typeof getPoolStandings>>()
+  for (const poolNumber of new Set(participants.flatMap((participant) => participant.poolNumber === null ? [] : [participant.poolNumber]))) {
+    standingsByPool.set(poolNumber, getPoolStandings(tournament, poolNumber))
+  }
+  const poolPositions = new Map<string, number>()
+  for (const standings of standingsByPool.values()) {
+    standings.forEach((participant, index) => poolPositions.set(participant.signupId, index + 1))
+  }
+  const standingsBySignupId = new Map(
+    Array.from(standingsByPool.values()).flatMap((standings) => standings.map((standing) => [standing.signupId, standing] as const)),
+  )
+  const entries = participants.filter((participant) => participant.advances).sort((first, second) =>
+    (poolPositions.get(first.signupId) ?? Infinity) - (poolPositions.get(second.signupId) ?? Infinity)
+    || (standingsBySignupId.get(second.signupId)?.wins ?? 0) - (standingsBySignupId.get(first.signupId)?.wins ?? 0)
+    || (standingsBySignupId.get(second.signupId)?.legDifference ?? 0) - (standingsBySignupId.get(first.signupId)?.legDifference ?? 0)
+    || (first.seed ?? Infinity) - (second.seed ?? Infinity)
+    || first.playerName.localeCompare(second.playerName, 'nb'))
   const bracketSize = 2 ** Math.ceil(Math.log2(entries.length))
   const seedOrder = bracketSeedOrder(bracketSize)
-  const entriesBySeed = new Map(entries.map((participant, index) => [index + 1, participant]))
+  const byeCount = bracketSize - entries.length
+  const byeParticipants = entries.slice(0, byeCount)
+  const remainingPools = new Map<number | null, TournamentParticipant[]>()
+  for (const participant of entries.slice(byeCount)) {
+    const pool = remainingPools.get(participant.poolNumber) ?? []
+    pool.push(participant)
+    remainingPools.set(participant.poolNumber, pool)
+  }
+  const entryRanks = new Map(entries.map((participant, index) => [participant.signupId, index]))
+  const pairings: Array<[TournamentParticipant, TournamentParticipant]> = []
+  while (Array.from(remainingPools.values()).some((pool) => pool.length > 0)) {
+    const availablePools = Array.from(remainingPools.entries())
+      .filter(([, pool]) => pool.length > 0)
+      .sort((first, second) => second[1].length - first[1].length
+        || (entryRanks.get(first[1][0].signupId) ?? Infinity) - (entryRanks.get(second[1][0].signupId) ?? Infinity))
+    if (availablePools.length > 1) {
+      const firstPool = availablePools[0][1]
+      const secondPool = availablePools[1][1]
+      const firstPlayer = firstPool.shift()
+      const secondPlayer = secondPool.pop()
+      if (!firstPlayer || !secondPlayer) throw new Error('Cup-trekningen kunne ikke opprettes.')
+      pairings.push((entryRanks.get(firstPlayer.signupId) ?? Infinity) < (entryRanks.get(secondPlayer.signupId) ?? Infinity)
+        ? [firstPlayer, secondPlayer]
+        : [secondPlayer, firstPlayer])
+    } else {
+      const finalPool = availablePools[0]?.[1] ?? []
+      while (finalPool.length > 0) {
+        const firstPlayer = finalPool.shift()
+        const secondPlayer = finalPool.pop()
+        if (!firstPlayer || !secondPlayer) throw new Error('Cup-trekningen kunne ikke opprettes.')
+        pairings.push((entryRanks.get(firstPlayer.signupId) ?? Infinity) < (entryRanks.get(secondPlayer.signupId) ?? Infinity)
+          ? [firstPlayer, secondPlayer]
+          : [secondPlayer, firstPlayer])
+      }
+    }
+  }
+
+  const matchSlots = seedOrder.map((firstSeed, index) => index % 2 === 0
+    ? { firstSeed, secondSeed: seedOrder[index + 1] }
+    : null)
+    .filter((slot): slot is { firstSeed: number; secondSeed: number } => slot !== null)
+  const byeSlots = matchSlots
+    .filter((slot) => (slot.firstSeed <= entries.length) !== (slot.secondSeed <= entries.length))
+    .sort((first, second) => Math.min(first.firstSeed, first.secondSeed) - Math.min(second.firstSeed, second.secondSeed))
+  const pairedSlots = matchSlots
+    .filter((slot) => slot.firstSeed <= entries.length && slot.secondSeed <= entries.length)
+    .sort((first, second) => Math.min(first.firstSeed, first.secondSeed) - Math.min(second.firstSeed, second.secondSeed))
+  const entriesBySeed = new Map<number, TournamentParticipant>()
+  byeSlots.forEach((slot, index) => {
+    entriesBySeed.set(Math.min(slot.firstSeed, slot.secondSeed), byeParticipants[index])
+  })
+  const pairingsByPosition = new Map<number, [TournamentParticipant, TournamentParticipant]>()
+  pairings.forEach((pairing, index) => {
+    const slot = pairedSlots[index]
+    if (!slot) throw new Error('Cup-trekningen kunne ikke opprettes.')
+    const firstSeed = Math.min(slot.firstSeed, slot.secondSeed)
+    pairingsByPosition.set(Math.floor((seedOrder.indexOf(firstSeed)) / 2), pairing)
+  })
   const firstRoundBestOfLegs = entries.length === 2 ? 9 : bracketSize === 4 ? 7 : 5
   const poolMatchesForCup = Array.from({ length: bracketSize / 2 }, (_, index) => {
-    const playerOne = entriesBySeed.get(seedOrder[index * 2])
-    const playerTwo = entriesBySeed.get(seedOrder[index * 2 + 1])
+    const firstSeed = seedOrder[index * 2]
+    const secondSeed = seedOrder[index * 2 + 1]
+    const topSeed = Math.min(firstSeed, secondSeed)
+    const byePlayer = entriesBySeed.get(topSeed)
+    const pairing = pairingsByPosition.get(index)
+    const playerOne = byePlayer ?? pairing?.[0]
+    const playerTwo = byePlayer ? undefined : pairing?.[1]
     if (!playerOne && !playerTwo) throw new Error('Cup-trekningen kunne ikke opprettes.')
     const winnerSignupId = !playerTwo && playerOne ? playerOne.signupId : null
     return {
@@ -178,8 +253,8 @@ export function setTournamentAdvancement(tournament: ClubTournament, advancesIds
       roundNumber: 1,
       bracketPosition: index,
       poolNumber: null,
-      playerOneSignupId: playerOne?.signupId ?? playerTwo!.signupId,
-      playerTwoSignupId: playerOne && playerTwo ? playerTwo.signupId : null,
+      playerOneSignupId: playerOne!.signupId,
+      playerTwoSignupId: playerTwo?.signupId ?? null,
       playerOneLegs: null,
       playerTwoLegs: null,
       winnerSignupId,

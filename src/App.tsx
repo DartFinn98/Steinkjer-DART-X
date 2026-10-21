@@ -373,7 +373,7 @@ function TournamentBoard({
         </section>
       })}
       {isAdmin && tournament.cupRound === 0 && poolsComplete && <div className="tournament-actions">
-        <p className="admin-empty">Velg spillerne som går videre. Tabellrekkefølgen viser seire, leggdifferanse og deretter seeding.</p>
+        <p className="admin-empty">Velg hvem som går videre. Cup-seedingen følger puljeplassering, seire og leggdifferanse; første runde settes opp mot spillere fra andre puljer så langt det er mulig.</p>
         <button className="primary-button" type="button" disabled={busy || tournament.participants.filter((participant) => participant.advances).length < 2} onClick={onCreateCup}>Lag cup-oppsett</button>
       </div>}
       {cupMatches.length > 0 && <section className="tournament-pool">
