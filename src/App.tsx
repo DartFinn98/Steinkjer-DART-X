@@ -1312,6 +1312,7 @@ function App() {
             legs: legsWon[player.id] ?? 0,
             average: darts > 0 ? (points / darts) * 3 : 0,
             lastVisit: last ? last.bust ? 'BUST' : String(last.total) : '',
+            lastVisitIsTon: Boolean(last && !last.bust && last.total >= 100),
             ...(player.teamId ? { teamId: player.teamId } : {}),
           }
         }),
@@ -3230,7 +3231,7 @@ function App() {
                   })}</div>}
                   <div className="legs-progress" aria-label={`${playerLegsWon} av ${legsToWin} ${roundWordPlural}`}><div>{Array.from({ length: legsToWin }, (_, legIndex) => <span key={legIndex} className={legIndex < playerLegsWon ? 'leg-pip earned' : 'leg-pip'} />)}</div><span>{playerLegsWon} / {legsToWin} {roundWordPlural.toUpperCase()}</span></div>
                   {gameMode !== 'cricket' && <div className={`player-stats${gameMode === '501' ? ' has-fastest-checkout' : ''}`} aria-label={`3-pilssnitt ${stats.average3.toFixed(1)}, ${stats.tons} 100-plussrunder, ${stats.oneEighties} 180-ere${gameMode === '501' ? `, raskeste 501-utgang ${stats.fastestCheckoutDarts === null ? 'ikke registrert' : `${stats.fastestCheckoutDarts} piler`}` : ''}`}><div><strong>{stats.average3.toFixed(1)}</strong><span>3-PILSSNITT</span></div><div><strong>{(stats.first9Average ?? 0).toFixed(1)}</strong><span title="Snitt for de første 9 pilene i hver legg">FØRSTE 9</span></div><div><strong>{stats.tons}</strong><span>100+</span></div><div><strong>{stats.tons140 ?? 0}</strong><span>140+</span></div><div><strong>{stats.oneEighties}</strong><span>180</span></div><div><strong>{stats.highestVisit}</strong><span>HØYESTE</span></div><div><strong>{stats.highestCheckout || '—'}</strong><span>HØYESTE UT</span></div>{gameMode === '501' && <div><strong>{stats.fastestCheckoutDarts ?? '—'}</strong><span title="Færrest piler brukt på en 501-legg">RASK 501</span></div>}</div>}
-                  <div className="player-card-bottom"><span>{gameMode === '501' ? `${legDartsThrown} PILER` : `${legVisits.length} ${legVisits.length === 1 ? 'TUR' : 'TURER'} I ${roundWord}`}</span>{player.scoreCorrected ? <span className="last-visit">POENGSUM RETTET</span> : lastVisit && <span className={lastVisit.bust ? 'last-visit bust-label' : 'last-visit'}>{lastVisit.bust ? 'SISTE TUR: BUST' : lastVisit.checkout ? 'UTGANG' : `SISTE TUR: ${lastVisit.total}`}</span>}</div>
+                  <div className="player-card-bottom"><span>{gameMode === '501' ? `${legDartsThrown} PILER` : `${legVisits.length} ${legVisits.length === 1 ? 'TUR' : 'TURER'} I ${roundWord}`}</span>{player.scoreCorrected ? <span className="last-visit">POENGSUM RETTET</span> : lastVisit && <span className={lastVisit.bust ? 'last-visit bust-label' : lastVisit.total >= 100 ? 'last-visit ton-highlight' : 'last-visit'}>{lastVisit.bust ? 'SISTE TUR: BUST' : lastVisit.checkout ? 'UTGANG' : `SISTE TUR: ${lastVisit.total}`}</span>}</div>
                 </article>
               )
             })}

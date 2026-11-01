@@ -49,6 +49,7 @@ export type LiveBoardPlayer = {
   legs: number
   average: number
   lastVisit: string
+  lastVisitIsTon?: boolean
   teamId?: 'A' | 'B'
 }
 
@@ -76,7 +77,8 @@ export async function clearLiveBoard(courtNumber: number) {
 export async function loadLiveBoards(): Promise<LiveBoard[]> {
   if (!supabase) return []
   const { data, error } = await supabase.from('live_boards').select('court_number, payload, updated_at').order('court_number')
-  if (error || !data) return []
+  if (error) throw error
+  if (!data) return []
   const cutoff = Date.now() - 3 * 60 * 60 * 1000
   return data
     .filter((row) => new Date(row.updated_at).getTime() > cutoff)
