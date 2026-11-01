@@ -859,6 +859,7 @@ function App() {
   const [manualTotal, setManualTotal] = useState('')
   const [manualDartsThrown, setManualDartsThrown] = useState<1 | 2 | 3>(3)
   const [manualLastDartDouble, setManualLastDartDouble] = useState(false)
+  const [checkoutPromptOpen, setCheckoutPromptOpen] = useState(false)
   const [manualBust, setManualBust] = useState(false)
   const [quickVisitRequest, setQuickVisitRequest] = useState(0)
   const scoreFormRef = useRef<HTMLFormElement>(null)
@@ -1594,8 +1595,8 @@ function App() {
     finishLeg(legWinner.id, players, 'bull-off', activePlayer, nextHistory.at(-1) ?? null)
   }
 
-  function recordVisit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  function recordVisit(event?: FormEvent<HTMLFormElement>, checkoutDarts?: 1 | 2 | 3) {
+    event?.preventDefault()
     if (!currentPlayer || winnerId) return
 
     let scores: [number, number, number] | null
@@ -1614,10 +1615,14 @@ function App() {
         setMessage('Skriv inn en totalsum fra 0 til 180.')
         return
       }
+      if (checkoutDarts === undefined && !manualBust && parsedTotal === currentPlayer.score) {
+        setCheckoutPromptOpen(true)
+        return
+      }
       scores = null
       total = parsedTotal
-      lastDartIsDouble = manualLastDartDouble
-      dartsThrown = manualDartsThrown
+      lastDartIsDouble = checkoutDarts !== undefined || manualLastDartDouble
+      dartsThrown = checkoutDarts ?? manualDartsThrown
     } else {
       const scoredDarts = darts.map(parseDartNotation)
       if (scoredDarts.some((dart) => dart === null)) {
@@ -3138,7 +3143,7 @@ function App() {
                     return <div className="cricket-mark" key={target} aria-label={`${target === 25 ? 'Bull' : target}: ${marks} av 3 treff`}><strong>{target === 25 ? 'BULL' : target}</strong><span>{[0, 1, 2].map((mark) => <i key={mark} className={mark < marks ? 'marked' : ''} />)}</span></div>
                   })}</div>}
                   <div className="legs-progress" aria-label={`${playerLegsWon} av ${legsToWin} ${roundWordPlural}`}><div>{Array.from({ length: legsToWin }, (_, legIndex) => <span key={legIndex} className={legIndex < playerLegsWon ? 'leg-pip earned' : 'leg-pip'} />)}</div><span>{playerLegsWon} / {legsToWin} {roundWordPlural.toUpperCase()}</span></div>
-                  {gameMode !== 'cricket' && <div className={`player-stats${gameMode === '501' ? ' has-fastest-checkout' : ''}`} aria-label={`3-pilssnitt ${stats.average3.toFixed(1)}, ${stats.tons} 100-plussrunder, ${stats.oneEighties} 180-ere${gameMode === '501' ? `, raskeste 501-utgang ${stats.fastestCheckoutDarts === null ? 'ikke registrert' : `${stats.fastestCheckoutDarts} piler`}` : ''}`}><div><strong>{stats.average3.toFixed(1)}</strong><span>3-PILSSNITT</span></div><div><strong>{stats.tons}</strong><span>100+</span></div><div><strong>{stats.oneEighties}</strong><span>180</span></div><div><strong>{stats.highestVisit}</strong><span>HØYESTE</span></div>{gameMode === '501' && <div><strong>{stats.fastestCheckoutDarts ?? '—'}</strong><span title="Færrest piler brukt på en 501-legg">RASK 501</span></div>}</div>}
+                  {gameMode !== 'cricket' && <div className={`player-stats${gameMode === '501' ? ' has-fastest-checkout' : ''}`} aria-label={`3-pilssnitt ${stats.average3.toFixed(1)}, ${stats.tons} 100-plussrunder, ${stats.oneEighties} 180-ere${gameMode === '501' ? `, raskeste 501-utgang ${stats.fastestCheckoutDarts === null ? 'ikke registrert' : `${stats.fastestCheckoutDarts} piler`}` : ''}`}><div><strong>{stats.average3.toFixed(1)}</strong><span>3-PILSSNITT</span></div><div><strong>{(stats.first9Average ?? 0).toFixed(1)}</strong><span title="Snitt for de første 9 pilene i hver legg">FØRSTE 9</span></div><div><strong>{stats.tons}</strong><span>100+</span></div><div><strong>{stats.tons140 ?? 0}</strong><span>140+</span></div><div><strong>{stats.oneEighties}</strong><span>180</span></div><div><strong>{stats.highestVisit}</strong><span>HØYESTE</span></div><div><strong>{stats.highestCheckout || '—'}</strong><span>HØYESTE UT</span></div>{gameMode === '501' && <div><strong>{stats.fastestCheckoutDarts ?? '—'}</strong><span title="Færrest piler brukt på en 501-legg">RASK 501</span></div>}</div>}
                   <div className="player-card-bottom"><span>{gameMode === '501' ? `${legDartsThrown} PILER` : `${legVisits.length} ${legVisits.length === 1 ? 'TUR' : 'TURER'} I ${roundWord}`}</span>{player.scoreCorrected ? <span className="last-visit">POENGSUM RETTET</span> : lastVisit && <span className={lastVisit.bust ? 'last-visit bust-label' : 'last-visit'}>{lastVisit.bust ? 'SISTE TUR: BUST' : lastVisit.checkout ? 'UTGANG' : `SISTE TUR: ${lastVisit.total}`}</span>}</div>
                 </article>
               )
@@ -3162,6 +3167,7 @@ function App() {
                 <button className="primary-button submit-score" type="submit">Før poeng <span aria-hidden="true">↗</span></button>
               </div>}
               <div className="entry-bottom">
+                <button className="undo-visit-button" type="button" disabled={!history.length} onClick={undoVisit}><span aria-hidden="true">↶</span> Angre siste visit</button>
                 {gameMode !== 'cricket' && <><div className="quick-scores" aria-label="Hurtigvalg for besøket"><button type="button" onClick={() => { if (entryMode === 'total') { setManualDartsThrown(3); setManualVisitTotal('0', 3) } else setDarts(['MISS', 'MISS', 'MISS']); setManualBust(false); setMessage('') }}>MISS</button>{Object.entries(QUICK_VISITS).map(([score, values]) => <button key={score} type="button" onClick={() => { if (entryMode === 'total') { setManualDartsThrown(3); setManualVisitTotal(score, 3) } else setDarts(values); setManualBust(false); setMessage('') }}>{score}</button>)}</div><label className="manual-double-toggle"><input type="checkbox" checked={manualBust} onChange={(event) => setManualBust(event.target.checked)} /><span className="custom-check" aria-hidden="true" />Registrer som bust</label></>}
               </div>
               {gameMode !== 'cricket' && <p className="quick-key-hint">Hurtigtaster: {Object.entries(FUNCTION_KEY_SCORES).map(([key, score]) => `${key} = ${score}`).join(' · ')}</p>}
@@ -3176,7 +3182,7 @@ function App() {
         {selectedMatch.legStarterName && <p className="history-dialog-starter">Startet på {selectedMatch.legStarterName}</p>}
         <div className="history-player-details">{selectedMatch.players.map((player) => <article className="history-player-detail" key={player.name}>
           <div className="history-player-heading"><h3>{player.teamId && <span>LAG {player.teamId} · </span>}{player.name}</h3><strong>{player.legsWon ?? 0} {selectedMatch.gameMode === '121' ? (player.legsWon === 1 ? 'runde' : 'runder') : 'legg'}</strong></div>
-          <dl className="history-player-stats"><div><dt>SLUTTPOENG</dt><dd>{player.score}</dd></div><div><dt>3-PILSSNITT</dt><dd>{(player.average3 ?? 0).toFixed(1)}</dd></div><div><dt>PILER</dt><dd>{player.dartsThrown ?? 0}</dd></div><div><dt>HØYESTE</dt><dd>{player.highestVisit ?? 0}</dd></div><div><dt>180</dt><dd>{player.oneEighties ?? 0}</dd></div><div><dt>RASK UTGANG</dt><dd>{player.fastestCheckoutDarts ?? '—'}</dd></div></dl>
+          <dl className="history-player-stats"><div><dt>SLUTTPOENG</dt><dd>{player.score}</dd></div><div><dt>3-PILSSNITT</dt><dd>{(player.average3 ?? 0).toFixed(1)}</dd></div><div><dt>PILER</dt><dd>{player.dartsThrown ?? 0}</dd></div><div><dt>FØRSTE 9</dt><dd>{(player.first9Average ?? 0).toFixed(1)}</dd></div><div><dt>HØYESTE</dt><dd>{player.highestVisit ?? 0}</dd></div><div><dt>HØYESTE UT</dt><dd>{player.highestCheckout || '—'}</dd></div><div><dt>140+</dt><dd>{player.tons140 ?? 0}</dd></div><div><dt>180</dt><dd>{player.oneEighties ?? 0}</dd></div><div><dt>RASK UTGANG</dt><dd>{player.fastestCheckoutDarts ?? '—'}</dd></div></dl>
           <h4>TURER</h4>
           {(player.visits ?? []).length > 0 ? <ol className="history-visits">{(player.visits ?? []).map((visit, index) => <li key={`${visit.legNumber}-${index}`}><span>{selectedMatch.gameMode === '121' ? 'RUNDE' : 'LEGG'} {visit.legNumber} · TUR {index + 1}</span><strong>{formatSavedVisit(visit)}</strong><span>{visit.bust ? 'BUST' : visit.checkout ? 'UTGANG' : `${visit.total} POENG`} · {visit.dartsThrown ?? 3} PILER</span></li>)}</ol> : <p className="history-no-visits">Ingen turer ble lagret for denne kampen.</p>}
         </article>)}</div>
@@ -3191,6 +3197,13 @@ function App() {
           {scoreEditError && <p className="score-edit-error" role="alert">{scoreEditError}</p>}
           <div className="score-edit-actions"><button className="text-button" type="button" onClick={closeScoreEditor}>Avbryt</button><button className="primary-button" type="submit">Lagre poengsum</button></div>
         </form>
+      </section></div>}
+      {checkoutPromptOpen && <div className="score-edit-backdrop"><section className="score-edit-dialog checkout-prompt" role="dialog" aria-modal="true" aria-labelledby="checkout-prompt-title">
+        <p className="eyebrow">UTGANG</p>
+        <h2 id="checkout-prompt-title">Hvor mange piler brukte du?</h2>
+        <p className="score-edit-note">{currentPlayer?.name} sjekket ut på {manualTotal}. Velg antall piler som ble brukt i turen, med siste pil på dobbel.</p>
+        <div className="checkout-prompt-options">{([1, 2, 3] as const).map((count) => <button key={count} className="primary-button" type="button" autoFocus={count === 1} onClick={() => { setCheckoutPromptOpen(false); recordVisit(undefined, count) }}>{count} {count === 1 ? 'pil' : 'piler'}</button>)}</div>
+        <div className="score-edit-actions"><button className="text-button" type="button" onClick={() => setCheckoutPromptOpen(false)}>Avbryt</button></div>
       </section></div>}
     </main>
   )

@@ -20,7 +20,25 @@ export type PlayerMatchStats = {
   oneEighties: number
   highestVisit: number
   fastestCheckoutDarts: number | null
+  tons140?: number
+  first9Average?: number
+  highestCheckout?: number
   visits: VisitForStats[]
+}
+
+function first9Average(visits: VisitForStats[]): number {
+  const dartsByLeg = new Map<number, number>()
+  let points = 0
+  let darts = 0
+  for (const visit of visits) {
+    const legDarts = dartsByLeg.get(visit.legNumber) ?? 0
+    if (legDarts >= 9) continue
+    const countedDarts = Math.min(visit.dartsThrown, 9 - legDarts)
+    dartsByLeg.set(visit.legNumber, legDarts + countedDarts)
+    darts += countedDarts
+    points += visit.bust ? 0 : visit.total * (countedDarts / visit.dartsThrown)
+  }
+  return darts > 0 ? (points / darts) * 3 : 0
 }
 
 export type TournamentPlayerMatchStats = {
@@ -62,8 +80,11 @@ export function summarizePlayer(player: PlayerForStats, legsWon: number): Player
     pointsScored,
     dartsThrown,
     tons: player.visits.filter((visit) => !visit.bust && visit.total >= 100).length,
+    tons140: player.visits.filter((visit) => !visit.bust && visit.total >= 140).length,
     oneEighties: player.visits.filter((visit) => !visit.bust && visit.total === 180).length,
     highestVisit: Math.max(0, ...player.visits.filter((visit) => !visit.bust).map((visit) => visit.total)),
+    highestCheckout: Math.max(0, ...player.visits.filter((visit) => !visit.bust && visit.checkout).map((visit) => visit.total)),
+    first9Average: first9Average(player.visits),
     fastestCheckoutDarts,
     visits: player.visits,
   }

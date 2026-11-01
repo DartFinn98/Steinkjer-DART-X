@@ -391,6 +391,10 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .bull-winner-choices button:hover { background: #124b39; }
 .bull-winner-choices button:focus-visible { outline: 3px solid var(--orange); outline-offset: 3px; }
 .bull-undo-button { margin-top: 13px; }
+.undo-visit-button { min-height: 44px; padding: 0 16px; border: 1px solid var(--green); background: transparent; color: var(--green); font: 600 12px var(--mono); letter-spacing: .5px; cursor: pointer; }
+.undo-visit-button:disabled { opacity: .45; cursor: not-allowed; }
+.checkout-prompt-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 14px 0 6px; }
+.checkout-prompt-options .primary-button { min-height: 54px; justify-content: center; }
 .bull-trigger { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-bottom: 16px; padding: 13px 15px; border: 1px solid #ec684866; background: #f8f6ef; }
 .bull-trigger > div { display: grid; gap: 5px; }
 .bull-trigger > div > span { color: var(--orange); font: 10px var(--mono); letter-spacing: 1px; }
@@ -436,7 +440,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .history-player-heading h3 { margin: 0; font-size: 14px; }
 .history-player-heading h3 span { color: var(--orange); font: 9px var(--mono); }
 .history-player-heading > strong { color: var(--green); font: 11px var(--mono); }
-.history-player-stats { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+.history-player-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(74px, 1fr)); gap: 10px 8px; margin: 12px 0; }
 .history-player-stats > div { min-width: 0; display: grid; gap: 4px; }
 .history-player-stats dt { color: var(--muted); font: 8px var(--mono); }
 .history-player-stats dd { margin: 0; color: var(--green); font: 600 13px var(--mono); }
@@ -502,8 +506,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .leg-pip { width: 19px; height: 4px; background: var(--line); }
 .leg-pip.earned { background: var(--green); }
 .legs-progress > span { color: var(--muted); font: 9px var(--mono); letter-spacing: .8px; }
-.player-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; padding: 10px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-.player-stats.has-fastest-checkout { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.player-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 6px; margin-bottom: 12px; padding: 10px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .player-stats > div { min-width: 0; display: grid; gap: 4px; }
 .player-stats strong { color: var(--green); font: 600 15px var(--mono); font-variant-numeric: tabular-nums; }
 .player-stats > div:first-child strong { font-size: 17px; }
