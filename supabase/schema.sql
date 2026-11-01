@@ -828,3 +828,36 @@ create policy "Club admins can delete club documents"
     bucket_id = 'club-documents'
     and (select public.is_club_admin())
   );
+
+-- Public, read-only summary of recent matches for the club landing page.
+create or replace function public.public_recent_matches(match_limit integer default 8)
+returns table (
+  id text,
+  played_at timestamptz,
+  winner_name text,
+  game_mode text,
+  best_of_legs smallint,
+  players jsonb
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    m.id,
+    m.played_at,
+    m.winner_name,
+    m.game_mode,
+    m.best_of_legs,
+    coalesce((
+      select jsonb_agg(jsonb_build_object('name', p ->> 'name', 'legsWon', coalesce((p ->> 'legsWon')::int, 0)))
+      from jsonb_array_elements(m.players) as p
+    ), '[]'::jsonb) as players
+  from public.matches m
+  order by m.played_at desc
+  limit least(greatest(coalesce(match_limit, 8), 1), 20);
+$$;
+
+revoke all on function public.public_recent_matches(integer) from public;
+grant execute on function public.public_recent_matches(integer) to anon, authenticated;

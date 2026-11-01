@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { getCheckoutHint } from './checkout'
-import { addAdminGuestSignup, addTournamentCupRound, beginGuestSession, deleteAllClubTournaments, deleteClubDocument, deleteClubSignup, deleteClubTournament, deleteSavedMatch, deleteSavedPlayer, downloadClubDocument, editFinishedTournamentMatch, endGuestSession, finishTournamentMatch, getGuestDisplayName, loadClubAdminStatus, loadClubAdmins, loadClubDocuments, loadClubSignups, loadClubTournaments, loadLinkedPlayerProfile, loadRegisteredPlayerNames, loadSavedData, saveClubSignup, saveClubTournament, saveFinishedMatch, saveLinkedPlayerId, savePlayers, saveTournamentMatchProgress, sendMatchReport, setClubAdminRole, syncPendingChanges, undoFinishedTournamentMatch, updateClubSignup, updateTournamentParticipantAvailability, uploadClubDocument, uploadProfileAvatar } from './database'
+import { addAdminGuestSignup, addTournamentCupRound, beginGuestSession, deleteAllClubTournaments, deleteClubDocument, deleteClubSignup, deleteClubTournament, deleteSavedMatch, deleteSavedPlayer, downloadClubDocument, editFinishedTournamentMatch, endGuestSession, finishTournamentMatch, getGuestDisplayName, loadClubAdminStatus, loadClubAdmins, loadClubDocuments, loadClubSignups, loadClubTournaments, loadLinkedPlayerProfile, loadPublicRecentMatches, loadRegisteredPlayerNames, loadSavedData, saveClubSignup, saveClubTournament, saveFinishedMatch, saveLinkedPlayerId, savePlayers, saveTournamentMatchProgress, sendMatchReport, setClubAdminRole, syncPendingChanges, undoFinishedTournamentMatch, updateClubSignup, updateTournamentParticipantAvailability, uploadClubDocument, uploadProfileAvatar } from './database'
 import type { ClubAdmin, ClubDocument, ClubSignup, ClubTournament, PendingSyncIssue, SavedData, TournamentGameHistory, TournamentMatch, TournamentMatchProgress, TournamentGamePlayer } from './database'
 import { supabase } from './supabase'
 import type { Session } from '@supabase/supabase-js'
@@ -886,10 +886,19 @@ function App() {
   const [authPassword, setAuthPassword] = useState('')
   const [authDisplayName, setAuthDisplayName] = useState('')
   const [guestNameInput, setGuestNameInput] = useState('')
+  const [publicMatches, setPublicMatches] = useState<Awaited<ReturnType<typeof loadPublicRecentMatches>>>([])
+  const showPublicHome = Boolean(supabase) && !session && !guestName
   const [authMessage, setAuthMessage] = useState('')
   const [authBusy, setAuthBusy] = useState(false)
   const [emailReportMessage, setEmailReportMessage] = useState('')
   const [isOnline, setIsOnline] = useState(() => navigator.onLine)
+
+  useEffect(() => {
+    if (!showPublicHome || !isOnline) return
+    let cancelled = false
+    void loadPublicRecentMatches(6).then((matches) => { if (!cancelled) setPublicMatches(matches) })
+    return () => { cancelled = true }
+  }, [showPublicHome, isOnline])
   const [reopenedMatchId, setReopenedMatchId] = useState<string | null>(null)
   const [clubSignups, setClubSignups] = useState<ClubSignup[]>([])
   const [clubSignupDate, setClubSignupDate] = useState(() => getUpcomingClubDates()[0])
@@ -2688,6 +2697,26 @@ function App() {
           {authMode === 'signup' && <button className="auth-mode-toggle" type="button" onClick={() => { setAuthMode('login'); setAuthMessage('') }}>Har du allerede konto? Logg inn</button>}
           {authMode === 'reset' && <button className="auth-mode-toggle" type="button" onClick={() => { setAuthMode('login'); setAuthMessage('') }}>Tilbake til innlogging</button>}
         </form>
+      </section>
+      <section className="club-home" aria-labelledby="club-home-title">
+        <div className="club-home-info">
+          <p className="eyebrow">STEINKJER DARTKLUBB</p>
+          <h2 id="club-home-title">Kom og prøv dart</h2>
+          <p>Steinkjer Dartklubb er et samlingspunkt for dartentusiaster i Steinkjer-området. Her er alle velkomne, uansett nivå. Det handler om fellesskap, moro og å dele lidenskapen for dart.</p>
+          <dl className="club-home-facts">
+            <div><dt>KLUBBKVELDER</dt><dd>Mandag og torsdag fra kl. 18:00</dd></div>
+            <div><dt>STED</dt><dd><a href="https://maps.app.goo.gl/uAARNq7qrcukmQ3d8" target="_blank" rel="noreferrer">Ogndalsvegen 143 ↗</a></dd></div>
+            <div><dt>PRISER</dt><dd>Klubbkveld: 50 kr for medlemmer, 100 kr for ikke-medlemmer<br />Medlemskontingent: 400 kr</dd></div>
+            <div><dt>STIFTET</dt><dd>16. januar 2026</dd></div>
+          </dl>
+          <button className="primary-button" type="button" onClick={() => document.querySelector('.guest-entry')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>Prøv poengtavla som gjest <span aria-hidden="true">↗</span></button>
+        </div>
+        <div className="club-home-results">
+          <p className="eyebrow">SISTE KAMPER</p>
+          {publicMatches.length === 0
+            ? <p className="club-home-empty">{isOnline ? 'Ingen kamper å vise ennå.' : 'Du er offline.'}</p>
+            : <ul>{publicMatches.map((match) => <li key={match.id}><span className="club-home-match-date">{new Intl.DateTimeFormat('nb-NO', { day: 'numeric', month: 'short' }).format(new Date(match.playedAt))}</span><span className="club-home-match-players">{match.players.length > 0 ? match.players.map((player) => `${player.name} ${player.legsWon}`).join(' – ') : match.winnerName}</span><strong>{match.winnerName} vant</strong></li>)}</ul>}
+        </div>
       </section>
     </main>
   }
