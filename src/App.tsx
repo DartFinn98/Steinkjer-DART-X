@@ -2786,11 +2786,11 @@ function App() {
             <button className="topbar-nav-link" type="button" aria-current={appSection === 'live' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'live' ? 'scoreboard' : 'live')}>Live</button>
             <button className="topbar-nav-link" type="button" aria-current={appSection === 'players' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'players' ? 'scoreboard' : 'players')}>Spillere</button>
             {session && <button className="topbar-nav-link" type="button" aria-current={appSection === 'profile' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'profile' ? 'scoreboard' : 'profile')}>Min statistikk</button>}
-            {(!guestName || session) && <button className="topbar-nav-link" type="button" aria-current={appSection === 'club-evenings' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'club-evenings' ? 'scoreboard' : 'club-evenings')}>{appSection === 'club-evenings' ? 'Poengtavle' : 'Påmelding'}</button>}
           </div>
-          {session && <div className="topbar-nav-group" aria-label="Konto og turnering">
-            <button className="topbar-nav-link" type="button" aria-current={appSection === 'tournament' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'tournament' ? 'scoreboard' : 'tournament')}>            Turnering</button>
-                        {isClubAdmin &&  <button className="topbar-nav-link" type="button" aria-current={appSection === 'admin' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'admin' ? 'scoreboard' : 'admin')}>Administrasjon</button>}
+          {(session || !guestName) && <div className="topbar-nav-group" aria-label="Turnering og påmelding">
+            {session && <button className="topbar-nav-link" type="button" aria-current={appSection === 'tournament' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'tournament' ? 'scoreboard' : 'tournament')}>Turnering</button>}
+            {(!guestName || session) && <button className="topbar-nav-link" type="button" aria-current={appSection === 'club-evenings' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'club-evenings' ? 'scoreboard' : 'club-evenings')}>{appSection === 'club-evenings' ? 'Poengtavle' : 'Påmelding'}</button>}
+            {session && isClubAdmin && <button className="topbar-nav-link" type="button" aria-current={appSection === 'admin' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'admin' ? 'scoreboard' : 'admin')}>Administrasjon</button>}
           </div>}
         </nav>
         <div className="topbar-actions">
