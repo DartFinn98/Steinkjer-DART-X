@@ -321,6 +321,9 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .club-home-results li strong { color: var(--green); font: 600 12px var(--mono); }
 .club-home-empty { color: var(--muted); }
 .install-app { margin-top: 14px; }
+.next-match-card { display: grid; gap: 2px; margin-top: 12px; padding: 12px 14px; border: 2px solid var(--green, #175c45); border-radius: 10px; background: rgba(255, 255, 255, 0.55); }
+.next-match-card strong { font-size: 1.25rem; }
+.next-match-card small { font-size: 0.95rem; }
 .topbar-actions .install-app { margin-top: 0; }
 .install-app-help { max-width: 360px; margin: 8px 0 0; color: var(--muted); font-size: 14px; }
 @media (max-width: 900px) { .club-home { grid-template-columns: 1fr; gap: 28px; padding: 28px 0 48px; } .club-home h2 { font-size: 30px; } }

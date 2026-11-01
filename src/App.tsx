@@ -828,6 +828,21 @@ function getTournamentMatchCourtNumber(tournament: ClubTournament, match: Tourna
   return poolNumber && poolNumber > 0 ? ((poolNumber - 1) % 5 + 1) as CourtNumber : 1
 }
 
+function getNextTournamentMatchForCourt(tournament: ClubTournament, court: CourtNumber): TournamentMatch | null {
+  const busy = new Set(tournament.matches
+    .filter((match) => match.inProgress)
+    .flatMap((match) => [match.playerOneSignupId, match.playerTwoSignupId ?? '']))
+  const available = new Map(tournament.participants.map((participant) => [participant.signupId, (participant.availability ?? 'ready') === 'ready']))
+  const queued = tournament.matches
+    .filter((match) => match.winnerSignupId === null && !match.inProgress && match.playerTwoSignupId !== null
+      && (tournament.cupRound > 0 ? match.phase === 'cup' && match.roundNumber === tournament.cupRound : match.phase === 'pool'))
+    .sort((first, second) => (first.poolNumber ?? 0) - (second.poolNumber ?? 0) || first.bracketPosition - second.bracketPosition)
+  const onCourt = queued.filter((match) => getTournamentMatchCourtNumber(tournament, match) === court)
+  const isFree = (match: TournamentMatch) => !busy.has(match.playerOneSignupId) && !busy.has(match.playerTwoSignupId!)
+    && available.get(match.playerOneSignupId) !== false && available.get(match.playerTwoSignupId!) !== false
+  return onCourt.find(isFree) ?? onCourt[0] ?? getNextQueuedTournamentMatch(tournament)
+}
+
 function App() {
   const [appSection, setAppSection] = useState<AppSection>('scoreboard')
   const [playerCount, setPlayerCount] = useState(2)
@@ -970,7 +985,13 @@ function App() {
   const savedTournament = savedTournamentResultDate
     ? clubTournaments.find((tournament) => tournament.eventDate === savedTournamentResultDate) ?? null
     : null
-  const savedTournamentNextMatch = savedTournament ? getNextQueuedTournamentMatch(savedTournament) : null
+  const savedTournamentNextMatch = savedTournament ? getNextTournamentMatchForCourt(savedTournament, courtNumber) : null
+  const nextMatchName = (signupId: string | null | undefined) => signupId
+    ? savedTournament?.participants.find((participant) => participant.signupId === signupId)?.playerName ?? 'Ukjent spiller'
+    : ''
+  const nextMatchRefereeId = savedTournament && savedTournamentNextMatch
+    ? getTournamentMatchRefereeSignupId(savedTournament, savedTournamentNextMatch)
+    : null
   const activeTournament = activeTournamentMatch
     ? clubTournaments.find((tournament) => tournament.eventDate === activeTournamentMatch.eventDate) ?? null
     : null
@@ -3183,7 +3204,7 @@ function App() {
             })}
           </div>
           {winner ? (
-            <div className="winner-banner" role="status"><div><p className="eyebrow">{matchWinnerId ? 'KAMPEN ER AVGJORT' : `${roundWord} ${legNumber - 1} ER FERDIG`}</p><h2>{matchWinnerId ? `${winnerDisplayName} vant kampen.` : `${winnerDisplayName} vant ${roundWordLower}en.`}</h2><p className="match-scoreline">{scorePlayers.map((player) => `${teamMode ? `Lag ${player.teamId} (${teamMembers(players, player).map((member) => member.name).join(' + ')})` : player.name} ${legsWon[player.id] ?? 0}`).join('  ·  ')} <span>BEST AV {bestOfLegs}</span></p>{matchWinnerId && emailReportMessage && <p className="email-report-status" role="status">{emailReportMessage}</p>}{matchWinnerId && tournamentMatchMessage && <p className="email-report-status" role={activeTournamentMatch ? 'alert' : 'status'}>{tournamentMatchMessage}</p>}{matchWinnerId && activeTournamentMatch && <button className="text-button" type="button" disabled={tournamentBusy} onClick={retryTournamentMatchSave}>Prøv å lagre turneringsresultatet på nytt</button>}</div><button className="primary-button" type="button" disabled={Boolean(activeTournamentMatch && matchWinnerId) || Boolean(savedTournamentResultDate && tournamentBusy)} onClick={matchWinnerId ? savedTournamentResultDate ? goToNextTournamentMatch : newGame : startNextLeg}>{matchWinnerId ? activeTournamentMatch ? 'Lagre resultatet først' : savedTournamentResultDate ? savedTournamentNextMatch ? 'Klar til neste kamp' : 'Til turneringen' : 'Ny kamp' : `Neste ${roundWordLower}`} <span aria-hidden="true">↗</span></button></div>
+            <div className="winner-banner" role="status"><div><p className="eyebrow">{matchWinnerId ? 'KAMPEN ER AVGJORT' : `${roundWord} ${legNumber - 1} ER FERDIG`}</p><h2>{matchWinnerId ? `${winnerDisplayName} vant kampen.` : `${winnerDisplayName} vant ${roundWordLower}en.`}</h2><p className="match-scoreline">{scorePlayers.map((player) => `${teamMode ? `Lag ${player.teamId} (${teamMembers(players, player).map((member) => member.name).join(' + ')})` : player.name} ${legsWon[player.id] ?? 0}`).join('  ·  ')} <span>BEST AV {bestOfLegs}</span></p>{matchWinnerId && emailReportMessage && <p className="email-report-status" role="status">{emailReportMessage}</p>}{matchWinnerId && tournamentMatchMessage && <p className="email-report-status" role={activeTournamentMatch ? 'alert' : 'status'}>{tournamentMatchMessage}</p>}{matchWinnerId && activeTournamentMatch && <button className="text-button" type="button" disabled={tournamentBusy} onClick={retryTournamentMatchSave}>Prøv å lagre turneringsresultatet på nytt</button>}{matchWinnerId && savedTournamentResultDate && savedTournamentNextMatch && <div className="next-match-card" role="status"><span className="eyebrow">NESTE KAMP · BANE {savedTournament ? getTournamentMatchCourtNumber(savedTournament, savedTournamentNextMatch) : courtNumber}</span><strong>{nextMatchName(savedTournamentNextMatch.playerOneSignupId)} – {nextMatchName(savedTournamentNextMatch.playerTwoSignupId)}</strong><small>Kaster først mot bull: {nextMatchName(savedTournamentNextMatch.playerOneSignupId)}</small><small>{nextMatchRefereeId ? `Dommer: ${nextMatchName(nextMatchRefereeId)}` : 'Dommer ikke tildelt'}</small></div>}</div><button className="primary-button" type="button" disabled={Boolean(activeTournamentMatch && matchWinnerId) || Boolean(savedTournamentResultDate && tournamentBusy)} onClick={matchWinnerId ? savedTournamentResultDate ? goToNextTournamentMatch : newGame : startNextLeg}>{matchWinnerId ? activeTournamentMatch ? 'Lagre resultatet først' : savedTournamentResultDate ? savedTournamentNextMatch ? 'Klar til neste kamp' : 'Til turneringen' : 'Ny kamp' : `Neste ${roundWordLower}`} <span aria-hidden="true">↗</span></button></div>
           ) : (
             <form className="score-entry" ref={scoreFormRef} onSubmit={recordVisit}>
               <div className="entry-title"><div><p className="eyebrow">{gameMode === 'cricket' ? 'REGISTRER TREFF' : 'REGISTRER POENG'}</p><h2>{currentPlayer?.name}<span> sin tur</span></h2></div><span className="dart-counter">{entryMode === 'total' && gameMode !== 'cricket' ? 'TOTALSUM' : '3 KAST'}</span></div>
