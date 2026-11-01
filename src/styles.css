@@ -731,6 +731,8 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 }
 @media (orientation: landscape) and (max-height: 600px) and (max-width: 1200px) {
   .app-shell { padding-right: max(16px, env(safe-area-inset-right)); padding-left: max(16px, env(safe-area-inset-left)); }
+}
+@media (min-width: 901px) and (max-width: 1280px), (orientation: landscape) and (max-height: 600px) and (max-width: 1200px) {
   .topbar { grid-template-areas: "brand actions" "nav nav"; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; padding-top: 6px; }
   .topbar > .brand { grid-area: brand; min-width: 0; gap: 8px; }
   .topbar-nav { grid-area: nav; min-width: 0; max-width: 100%; justify-content: flex-start; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
@@ -739,8 +741,10 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
   .topbar-nav-link { min-height: 40px; padding: 0 9px; font-size: 11px; }
   .topbar-nav-link[aria-current="page"]::after { right: 9px; left: 9px; }
   .topbar-actions { grid-area: actions; min-width: 0; }
-  .topbar-meta { display: none; }
   .topbar-actions .sign-out-button { min-height: 36px; }
+}
+@media (orientation: landscape) and (max-height: 600px) and (max-width: 1200px) {
+  .topbar-meta { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
