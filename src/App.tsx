@@ -665,6 +665,10 @@ const CRICKET_DART_OPTION_GROUPS = DART_OPTION_GROUPS.map((group) => ({
   options: group.options.filter((option) => option.value === 'MISS' || option.value === 'SB' || option.value === 'BULL' || /^[SDT](1[5-9]|20)$/.test(option.value)),
 })).filter((group) => group.options.length > 0)
 
+const FUNCTION_KEY_SCORES: Record<string, number> = {
+  F1: 60, F2: 100, F3: 140, F4: 180, F5: 1, F6: 26, F7: 41, F8: 45, F9: 85, F10: 100,
+}
+
 const QUICK_VISITS: Record<number, DartInputs> = {
   60: ['T20', 'MISS', 'MISS'],
   100: ['T20', 'D20', 'MISS'],
@@ -856,6 +860,8 @@ function App() {
   const [manualDartsThrown, setManualDartsThrown] = useState<1 | 2 | 3>(3)
   const [manualLastDartDouble, setManualLastDartDouble] = useState(false)
   const [manualBust, setManualBust] = useState(false)
+  const [quickVisitRequest, setQuickVisitRequest] = useState(0)
+  const scoreFormRef = useRef<HTMLFormElement>(null)
   const [checkoutTableOpen, setCheckoutTableOpen] = useState(false)
   const [historySearch, setHistorySearch] = useState('')
   const [historyGameMode, setHistoryGameMode] = useState<GameMode | 'all'>('all')
@@ -1964,6 +1970,30 @@ function App() {
     )
     setMessage('')
   }
+
+  const canUseQuickKeys = gamePhase === 'playing' && !winnerId && gameMode !== 'cricket' && Boolean(currentPlayer)
+
+  useEffect(() => {
+    if (!canUseQuickKeys) return
+    function onKeyDown(event: KeyboardEvent) {
+      const score = FUNCTION_KEY_SCORES[event.key]
+      if (score === undefined || event.repeat || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return
+      event.preventDefault()
+      setEntryMode('total')
+      setManualDartsThrown(3)
+      setManualBust(false)
+      setManualVisitTotal(String(score), 3)
+      setQuickVisitRequest((request) => request + 1)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  })
+
+  useEffect(() => {
+    if (quickVisitRequest === 0) return
+    scoreFormRef.current?.requestSubmit()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quickVisitRequest])
 
   async function addAdminGuestClubSignup() {
     if (adminSignupsBusy) return
@@ -3117,7 +3147,7 @@ function App() {
           {winner ? (
             <div className="winner-banner" role="status"><div><p className="eyebrow">{matchWinnerId ? 'KAMPEN ER AVGJORT' : `${roundWord} ${legNumber - 1} ER FERDIG`}</p><h2>{matchWinnerId ? `${winnerDisplayName} vant kampen.` : `${winnerDisplayName} vant ${roundWordLower}en.`}</h2><p className="match-scoreline">{scorePlayers.map((player) => `${teamMode ? `Lag ${player.teamId} (${teamMembers(players, player).map((member) => member.name).join(' + ')})` : player.name} ${legsWon[player.id] ?? 0}`).join('  ·  ')} <span>BEST AV {bestOfLegs}</span></p>{matchWinnerId && emailReportMessage && <p className="email-report-status" role="status">{emailReportMessage}</p>}{matchWinnerId && tournamentMatchMessage && <p className="email-report-status" role={activeTournamentMatch ? 'alert' : 'status'}>{tournamentMatchMessage}</p>}{matchWinnerId && activeTournamentMatch && <button className="text-button" type="button" disabled={tournamentBusy} onClick={retryTournamentMatchSave}>Prøv å lagre turneringsresultatet på nytt</button>}</div><button className="primary-button" type="button" disabled={Boolean(activeTournamentMatch && matchWinnerId) || Boolean(savedTournamentResultDate && tournamentBusy)} onClick={matchWinnerId ? savedTournamentResultDate ? goToNextTournamentMatch : newGame : startNextLeg}>{matchWinnerId ? activeTournamentMatch ? 'Lagre resultatet først' : savedTournamentResultDate ? savedTournamentNextMatch ? 'Klar til neste kamp' : 'Til turneringen' : 'Ny kamp' : `Neste ${roundWordLower}`} <span aria-hidden="true">↗</span></button></div>
           ) : (
-            <form className="score-entry" onSubmit={recordVisit}>
+            <form className="score-entry" ref={scoreFormRef} onSubmit={recordVisit}>
               <div className="entry-title"><div><p className="eyebrow">{gameMode === 'cricket' ? 'REGISTRER TREFF' : 'REGISTRER POENG'}</p><h2>{currentPlayer?.name}<span> sin tur</span></h2></div><span className="dart-counter">{entryMode === 'total' && gameMode !== 'cricket' ? 'TOTALSUM' : '3 KAST'}</span></div>
               {gameMode === '501' && <button className="checkout-table-toggle" type="button" aria-expanded={checkoutTableOpen} aria-controls="checkout-table" onClick={() => setCheckoutTableOpen((open) => !open)}><span aria-hidden="true">{checkoutTableOpen ? '−' : '+'}</span>{checkoutTableOpen ? 'Skjul utgangstabell' : 'Utgangstabell'}</button>}
               {gameMode === '501' && <section className="checkout-table" id="checkout-table" aria-label="Utgangstabell for 501 med dobbel ut" hidden={!checkoutTableOpen}><div className="checkout-table-heading"><strong>501 · DOBBEL UT</strong><span>Utganger fra 2 til 170</span></div><div className="checkout-table-grid">{CHECKOUT_TABLE.map(({ score, route }) => <div className="checkout-table-row" key={score}><strong>{score}</strong><span>{route}</span></div>)}</div></section>}
@@ -3134,6 +3164,7 @@ function App() {
               <div className="entry-bottom">
                 {gameMode !== 'cricket' && <><div className="quick-scores" aria-label="Hurtigvalg for besøket"><button type="button" onClick={() => { if (entryMode === 'total') { setManualDartsThrown(3); setManualVisitTotal('0', 3) } else setDarts(['MISS', 'MISS', 'MISS']); setManualBust(false); setMessage('') }}>MISS</button>{Object.entries(QUICK_VISITS).map(([score, values]) => <button key={score} type="button" onClick={() => { if (entryMode === 'total') { setManualDartsThrown(3); setManualVisitTotal(score, 3) } else setDarts(values); setManualBust(false); setMessage('') }}>{score}</button>)}</div><label className="manual-double-toggle"><input type="checkbox" checked={manualBust} onChange={(event) => setManualBust(event.target.checked)} /><span className="custom-check" aria-hidden="true" />Registrer som bust</label></>}
               </div>
+              {gameMode !== 'cricket' && <p className="quick-key-hint">Hurtigtaster: {Object.entries(FUNCTION_KEY_SCORES).map(([key, score]) => `${key} = ${score}`).join(' · ')}</p>}
               <p className="entry-message" aria-live="polite">{message || (gameMode === 'cricket' ? 'Lukk alle feltene og ha minst like mange poeng som motstanderen.' : entryMode === 'total' ? 'Ved totalsum lik poengene du har igjen, markeres dobbel automatisk. Du kan endre avhukingen ved behov.' : 'Velg enkel, dobbel, trippel eller miss (bom) for hver pil.')}</p>
             </form>
           )}
