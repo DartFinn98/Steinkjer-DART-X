@@ -321,6 +321,22 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .club-home-results li strong { color: var(--green); font: 600 12px var(--mono); }
 .club-home-empty { color: var(--muted); }
 .install-app { margin-top: 14px; }
+.live-boards { display: grid; gap: 16px; padding: 8px 0 32px; }
+.live-boards-heading h2 { margin: 0; }
+.live-empty { color: var(--muted); }
+.live-board-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 16px; }
+.live-board { display: grid; gap: 10px; padding: 14px; border: 2px solid var(--green, #175c45); border-radius: 12px; background: rgba(255, 255, 255, 0.55); }
+.live-board header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; }
+.live-board header span { color: var(--muted); font-size: 0.85rem; }
+.live-board ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.live-board li { display: grid; grid-template-columns: 1fr auto auto; align-items: baseline; gap: 2px 12px; padding: 8px 10px; border-radius: 8px; border: 1px solid transparent; }
+.live-board li.is-active { border-color: var(--green, #175c45); background: rgba(23, 92, 69, 0.12); }
+.live-board li small { grid-column: 1 / -1; color: var(--muted); }
+.live-player-name { font-weight: 700; overflow-wrap: anywhere; }
+.live-player-name i { margin-right: 6px; font-style: normal; }
+.live-player-score { font-size: 2rem; line-height: 1; }
+.live-player-legs { font-weight: 700; }
+.live-finished { margin: 0; font-weight: 700; }
 .next-match-card { display: grid; gap: 2px; margin-top: 12px; padding: 12px 14px; border: 2px solid var(--green, #175c45); border-radius: 10px; background: rgba(255, 255, 255, 0.55); }
 .next-match-card strong { font-size: 1.25rem; }
 .next-match-card small { font-size: 0.95rem; }

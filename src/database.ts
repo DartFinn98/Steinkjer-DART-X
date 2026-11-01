@@ -43,6 +43,46 @@ export async function loadPublicRecentMatches(limit = 6): Promise<PublicMatch[]>
   }))
 }
 
+export type LiveBoardPlayer = {
+  name: string
+  score: number
+  legs: number
+  average: number
+  lastVisit: string
+  teamId?: 'A' | 'B'
+}
+
+export type LiveBoard = {
+  courtNumber: number
+  gameMode: string
+  bestOfLegs: number
+  legNumber: number
+  activeIndex: number
+  finished: boolean
+  players: LiveBoardPlayer[]
+  updatedAt: string
+}
+
+export async function publishLiveBoard(courtNumber: number, board: Omit<LiveBoard, 'courtNumber' | 'updatedAt'>) {
+  if (!supabase) return
+  await supabase.from('live_boards').upsert({ court_number: courtNumber, payload: board, updated_at: new Date().toISOString() })
+}
+
+export async function clearLiveBoard(courtNumber: number) {
+  if (!supabase) return
+  await supabase.from('live_boards').delete().eq('court_number', courtNumber)
+}
+
+export async function loadLiveBoards(): Promise<LiveBoard[]> {
+  if (!supabase) return []
+  const { data, error } = await supabase.from('live_boards').select('court_number, payload, updated_at').order('court_number')
+  if (error || !data) return []
+  const cutoff = Date.now() - 3 * 60 * 60 * 1000
+  return data
+    .filter((row) => new Date(row.updated_at).getTime() > cutoff)
+    .map((row) => ({ ...(row.payload as Omit<LiveBoard, 'courtNumber' | 'updatedAt'>), courtNumber: row.court_number, updatedAt: row.updated_at }))
+}
+
 export type SavedData = {
   players: SavedPlayer[]
   matches: SavedMatch[]

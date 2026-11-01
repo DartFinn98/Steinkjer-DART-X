@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { getCheckoutHint } from './checkout'
-import { addAdminGuestSignup, addTournamentCupRound, beginGuestSession, deleteAllClubTournaments, deleteClubDocument, deleteClubSignup, deleteClubTournament, deleteSavedMatch, deleteSavedPlayer, downloadClubDocument, editFinishedTournamentMatch, endGuestSession, finishTournamentMatch, getGuestDisplayName, loadClubAdminStatus, loadClubAdmins, loadClubDocuments, loadClubSignups, loadClubTournaments, loadLinkedPlayerProfile, loadPublicRecentMatches, loadRegisteredPlayerNames, loadSavedData, saveClubSignup, saveClubTournament, saveFinishedMatch, saveLinkedPlayerId, savePlayers, saveTournamentMatchProgress, sendMatchReport, setClubAdminRole, syncPendingChanges, undoFinishedTournamentMatch, updateClubSignup, updateTournamentParticipantAvailability, uploadClubDocument, uploadProfileAvatar } from './database'
+import { addAdminGuestSignup, addTournamentCupRound, beginGuestSession, clearLiveBoard, deleteAllClubTournaments, deleteClubDocument, deleteClubSignup, deleteClubTournament, deleteSavedMatch, deleteSavedPlayer, downloadClubDocument, editFinishedTournamentMatch, endGuestSession, finishTournamentMatch, getGuestDisplayName, loadClubAdminStatus, loadClubAdmins, loadClubDocuments, loadClubSignups, loadClubTournaments, loadLinkedPlayerProfile, loadPublicRecentMatches, loadRegisteredPlayerNames, loadSavedData, publishLiveBoard, saveClubSignup, saveClubTournament, saveFinishedMatch, saveLinkedPlayerId, savePlayers, saveTournamentMatchProgress, sendMatchReport, setClubAdminRole, syncPendingChanges, undoFinishedTournamentMatch, updateClubSignup, updateTournamentParticipantAvailability, uploadClubDocument, uploadProfileAvatar } from './database'
 import type { ClubAdmin, ClubDocument, ClubSignup, ClubTournament, PendingSyncIssue, SavedData, TournamentGameHistory, TournamentMatch, TournamentMatchProgress, TournamentGamePlayer } from './database'
 import { supabase } from './supabase'
 import { InstallAppButton } from './InstallApp'
+import { LiveBoards } from './LiveBoards'
 import type { Session } from '@supabase/supabase-js'
 import { summarizePlayer, summarizeTournamentPlayer } from './stats'
 import { applyCricketVisit, CRICKET_TARGETS, hasWonCricket } from './cricket'
@@ -25,7 +26,7 @@ type Player = TournamentGamePlayer
 type Snapshot = TournamentGameHistory
 type EntryMode = 'darts' | 'total'
 type GamePhase = 'setup' | 'bull-off' | 'leg-bull-off' | 'playing'
-type AppSection = 'scoreboard' | 'club-evenings' | 'players' | 'profile' | 'admin' | 'tournament'
+type AppSection = 'scoreboard' | 'club-evenings' | 'players' | 'profile' | 'admin' | 'tournament' | 'live'
 type CoinSide = 'kron' | 'mynt'
 type CourtNumber = 1 | 2 | 3 | 4 | 5
 type Visit = TournamentGamePlayer['visits'][number]
@@ -1292,6 +1293,40 @@ function App() {
     : players
   const legNumber = legScorePlayers.reduce((total, player) => total + (legsWon[player.id] ?? 0), 0) + 1
   const roundWord = gameMode === '121' ? 'RUNDE' : 'LEGG'
+  const liveBoardActive = Boolean(session) && gamePhase !== 'setup' && players.length > 0
+  const liveBoardKey = liveBoardActive ? JSON.stringify([courtNumber, gameMode, bestOfLegs, legNumber, activePlayer, matchWinnerId, players.map((player) => [player.name, player.score, player.visits.length, player.teamId]), legsWon]) : ''
+  useEffect(() => {
+    if (!liveBoardActive) return
+    const timer = window.setTimeout(() => {
+      void publishLiveBoard(courtNumber, {
+        gameMode,
+        bestOfLegs,
+        legNumber,
+        activeIndex: activePlayer,
+        finished: Boolean(matchWinnerId),
+        players: players.map((player) => {
+          const points = player.visits.filter((visit) => !visit.bust).reduce((total, visit) => total + visit.total, 0)
+          const darts = player.visits.reduce((total, visit) => total + visit.dartsThrown, 0)
+          const last = player.visits.at(-1)
+          return {
+            name: player.name,
+            score: player.score,
+            legs: legsWon[player.id] ?? 0,
+            average: darts > 0 ? (points / darts) * 3 : 0,
+            lastVisit: last ? last.bust ? 'BUST' : String(last.total) : '',
+            ...(player.teamId ? { teamId: player.teamId } : {}),
+          }
+        }),
+      }).catch(() => undefined)
+    }, 500)
+    return () => window.clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveBoardKey])
+  useEffect(() => {
+    if (!liveBoardActive) return
+    const court = courtNumber
+    return () => { void clearLiveBoard(court).catch(() => undefined) }
+  }, [liveBoardActive, courtNumber])
   const roundWordLower = gameMode === '121' ? 'runde' : 'legg'
   const roundWordPlural = gameMode === '121' ? 'runder' : 'legg'
   const checkoutHint = currentPlayer && gameMode !== 'cricket' ? getCheckoutHint(currentPlayer.score) : null
@@ -2760,6 +2795,7 @@ function App() {
           {session && <div className="topbar-nav-group" aria-label="Konto og turnering">
             <button className="topbar-nav-link" type="button" aria-current={appSection === 'profile' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'profile' ? 'scoreboard' : 'profile')}>Min statistikk</button>
             <button className="topbar-nav-link" type="button" aria-current={appSection === 'tournament' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'tournament' ? 'scoreboard' : 'tournament')}>Turnering</button>
+            {session && <button className="topbar-nav-link" type="button" aria-current={appSection === 'live' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'live' ? 'scoreboard' : 'live')}>Live</button>}
             {isClubAdmin && <button className="topbar-nav-link" type="button" aria-current={appSection === 'admin' ? 'page' : undefined} onClick={() => setAppSection(appSection === 'admin' ? 'scoreboard' : 'admin')}>Administrasjon</button>}
           </div>}
         </nav>
@@ -2772,7 +2808,9 @@ function App() {
       </header>
       {databaseMessage && <div className="database-message" role="status"><span>{databaseMessage}</span><button type="button" aria-label="Skjul varsel" onClick={() => setDatabaseMessage('')}>Lukk</button></div>}
 
-      {appSection === 'players' ? (
+      {appSection === 'live' && session ? (
+        <LiveBoards />
+      ) : appSection === 'players' ? (
         <section className="player-directory-page">
           <div className="club-evenings-heading">
             <p className="eyebrow">STEINKJER DART-X / SPILLERLISTE</p>

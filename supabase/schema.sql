@@ -861,3 +861,19 @@ $$;
 
 revoke all on function public.public_recent_matches(integer) from public;
 grant execute on function public.public_recent_matches(integer) to anon, authenticated;
+
+create table if not exists public.live_boards (
+  court_number smallint primary key check (court_number between 1 and 5),
+  payload jsonb not null,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.live_boards enable row level security;
+
+drop policy if exists "Signed-in members can view live boards" on public.live_boards;
+create policy "Signed-in members can view live boards"
+  on public.live_boards for select to authenticated using (true);
+
+drop policy if exists "Signed-in members can write live boards" on public.live_boards;
+create policy "Signed-in members can write live boards"
+  on public.live_boards for all to authenticated using (true) with check (true);
