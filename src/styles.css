@@ -323,6 +323,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .install-app { margin-top: 14px; }
 .live-boards { display: grid; gap: 16px; padding: 8px 0 32px; }
 .live-boards-heading h2 { margin: 0; }
+.live-boards.is-compact { max-width: 1100px; margin: 0 auto; padding: 8px 16px 32px; }
 .live-empty { color: var(--muted); }
 .live-board-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 16px; }
 .live-board { display: grid; gap: 10px; padding: 14px; border: 2px solid var(--green, #175c45); border-radius: 12px; background: rgba(255, 255, 255, 0.55); }

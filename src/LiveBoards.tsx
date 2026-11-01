@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { loadLiveBoards } from './database'
 import type { LiveBoard } from './database'
 
-export function LiveBoards() {
+export function LiveBoards({ compact = false }: { compact?: boolean }) {
   const [boards, setBoards] = useState<LiveBoard[]>([])
   const [loaded, setLoaded] = useState(false)
 
@@ -23,9 +23,10 @@ export function LiveBoards() {
     }
   }, [])
 
-  return <section className="live-boards" aria-label="Live score">
+  return <section className={compact ? 'live-boards is-compact' : 'live-boards'} aria-label="Live score">
     <div className="live-boards-heading"><p className="eyebrow">LIVE</p><h2>Pågående kamper</h2></div>
-    {loaded && boards.length === 0 && <p className="live-empty">Ingen kamper pågår akkurat nå. Oversikten oppdateres automatisk.</p>}
+    {loaded && boards.length === 0 && compact ? <p className="live-empty">Ingen kamper pågår akkurat nå.</p> : null}
+    {loaded && boards.length === 0 && !compact && <p className="live-empty">Ingen kamper pågår akkurat nå. Oversikten oppdateres automatisk.</p>}
     <div className="live-board-grid">
       {boards.map((board) => <article className="live-board" key={board.courtNumber}>
         <header><strong>BANE {board.courtNumber}</strong><span>{board.gameMode === 'cricket' ? 'CRICKET' : board.gameMode} · BEST AV {board.bestOfLegs} · {board.gameMode === '121' ? 'RUNDE' : 'LEGG'} {board.legNumber}</span></header>

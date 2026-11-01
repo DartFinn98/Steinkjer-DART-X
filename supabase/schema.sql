@@ -877,3 +877,7 @@ create policy "Signed-in members can view live boards"
 drop policy if exists "Signed-in members can write live boards" on public.live_boards;
 create policy "Signed-in members can write live boards"
   on public.live_boards for all to authenticated using (true) with check (true);
+
+drop policy if exists "Guests can view live boards" on public.live_boards;
+create policy "Guests can view live boards"
+  on public.live_boards for select to anon using (true);
