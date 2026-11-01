@@ -878,8 +878,6 @@ function App() {
   const [manualLastDartDouble, setManualLastDartDouble] = useState(false)
   const [checkoutPromptOpen, setCheckoutPromptOpen] = useState(false)
   const [manualBust, setManualBust] = useState(false)
-  const [quickVisitRequest, setQuickVisitRequest] = useState(0)
-  const scoreFormRef = useRef<HTMLFormElement>(null)
   const [checkoutTableOpen, setCheckoutTableOpen] = useState(false)
   const [historySearch, setHistorySearch] = useState('')
   const [historyGameMode, setHistoryGameMode] = useState<GameMode | 'all'>('all')
@@ -1661,7 +1659,7 @@ function App() {
     finishLeg(legWinner.id, players, 'bull-off', activePlayer, nextHistory.at(-1) ?? null)
   }
 
-  function recordVisit(event?: FormEvent<HTMLFormElement>, checkoutDarts?: 1 | 2 | 3) {
+  function recordVisit(event?: FormEvent<HTMLFormElement>, checkoutDarts?: 1 | 2 | 3, quickTotal?: number) {
     event?.preventDefault()
     if (!currentPlayer || winnerId) return
 
@@ -1671,24 +1669,24 @@ function App() {
     let dartsThrown: number
     let cricketDarts: CricketDart[] | null = null
 
-    if (entryMode === 'total') {
+    if (quickTotal !== undefined || entryMode === 'total') {
       if (gameMode === 'cricket') {
         setMessage('Velg kast for hver pil for å registrere Cricket-treff.')
         return
       }
-      const parsedTotal = Number(manualTotal)
-      if (manualTotal.trim() === '' || !Number.isInteger(parsedTotal) || parsedTotal < 0 || parsedTotal > 180) {
+      const parsedTotal = quickTotal ?? Number(manualTotal)
+      if ((quickTotal === undefined && manualTotal.trim() === '') || !Number.isInteger(parsedTotal) || parsedTotal < 0 || parsedTotal > 180) {
         setMessage('Skriv inn en totalsum fra 0 til 180.')
         return
       }
-      if (checkoutDarts === undefined && !manualBust && parsedTotal === currentPlayer.score) {
+      if (checkoutDarts === undefined && (quickTotal !== undefined || !manualBust) && parsedTotal === currentPlayer.score) {
         setCheckoutPromptOpen(true)
         return
       }
       scores = null
       total = parsedTotal
-      lastDartIsDouble = checkoutDarts !== undefined || manualLastDartDouble
-      dartsThrown = checkoutDarts ?? manualDartsThrown
+      lastDartIsDouble = checkoutDarts !== undefined || (quickTotal === undefined && manualLastDartDouble)
+      dartsThrown = checkoutDarts ?? (quickTotal === undefined ? manualDartsThrown : 3)
     } else {
       const scoredDarts = darts.map(parseDartNotation)
       if (scoredDarts.some((dart) => dart === null)) {
@@ -1745,7 +1743,7 @@ function App() {
     }
 
     const remaining = currentPlayer.score - total
-    const bust = manualBust || remaining < 0 || remaining === 1 || (remaining === 0 && !lastDartIsDouble)
+    const bust = (quickTotal === undefined && manualBust) || remaining < 0 || remaining === 1 || (remaining === 0 && !lastDartIsDouble)
     const checkout = !bust && remaining === 0 && lastDartIsDouble
     const nextPlayers = players.map((player, index) => {
       const isCurrentPlayer = index === activePlayer
@@ -2050,21 +2048,16 @@ function App() {
       const score = FUNCTION_KEY_SCORES[event.key]
       if (score === undefined || event.repeat || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return
       event.preventDefault()
+      if (checkoutPromptOpen) return
       setEntryMode('total')
       setManualDartsThrown(3)
       setManualBust(false)
       setManualVisitTotal(String(score), 3)
-      setQuickVisitRequest((request) => request + 1)
+      recordVisit(undefined, undefined, score)
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   })
-
-  useEffect(() => {
-    if (quickVisitRequest === 0) return
-    scoreFormRef.current?.requestSubmit()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quickVisitRequest])
 
   async function addAdminGuestClubSignup() {
     if (adminSignupsBusy) return
@@ -3245,7 +3238,7 @@ function App() {
           {winner ? (
             <div className="winner-banner" role="status"><div><p className="eyebrow">{matchWinnerId ? 'KAMPEN ER AVGJORT' : `${roundWord} ${legNumber - 1} ER FERDIG`}</p><h2>{matchWinnerId ? `${winnerDisplayName} vant kampen.` : `${winnerDisplayName} vant ${roundWordLower}en.`}</h2><p className="match-scoreline">{scorePlayers.map((player) => `${teamMode ? `Lag ${player.teamId} (${teamMembers(players, player).map((member) => member.name).join(' + ')})` : player.name} ${legsWon[player.id] ?? 0}`).join('  ·  ')} <span>BEST AV {bestOfLegs}</span></p>{matchWinnerId && emailReportMessage && <p className="email-report-status" role="status">{emailReportMessage}</p>}{matchWinnerId && tournamentMatchMessage && <p className="email-report-status" role={activeTournamentMatch ? 'alert' : 'status'}>{tournamentMatchMessage}</p>}{matchWinnerId && activeTournamentMatch && <button className="text-button" type="button" disabled={tournamentBusy} onClick={retryTournamentMatchSave}>Prøv å lagre turneringsresultatet på nytt</button>}{matchWinnerId && savedTournamentResultDate && savedTournamentNextMatch && <div className="next-match-card" role="status"><span className="eyebrow">NESTE KAMP · BANE {savedTournament ? getTournamentMatchCourtNumber(savedTournament, savedTournamentNextMatch) : courtNumber}</span><strong>{nextMatchName(savedTournamentNextMatch.playerOneSignupId)} – {nextMatchName(savedTournamentNextMatch.playerTwoSignupId)}</strong><small>Kaster først mot bull: {nextMatchName(savedTournamentNextMatch.playerOneSignupId)}</small><small>{nextMatchRefereeId ? `Dommer: ${nextMatchName(nextMatchRefereeId)}` : 'Dommer ikke tildelt'}</small></div>}</div><button className="primary-button" type="button" disabled={Boolean(activeTournamentMatch && matchWinnerId) || Boolean(savedTournamentResultDate && tournamentBusy)} onClick={matchWinnerId ? savedTournamentResultDate ? goToNextTournamentMatch : newGame : startNextLeg}>{matchWinnerId ? activeTournamentMatch ? 'Lagre resultatet først' : savedTournamentResultDate ? savedTournamentNextMatch ? 'Klar til neste kamp' : 'Til turneringen' : 'Ny kamp' : `Neste ${roundWordLower}`} <span aria-hidden="true">↗</span></button></div>
           ) : (
-            <form className="score-entry" ref={scoreFormRef} onSubmit={recordVisit}>
+            <form className="score-entry" onSubmit={recordVisit}>
               <div className="entry-title"><div><p className="eyebrow">{gameMode === 'cricket' ? 'REGISTRER TREFF' : 'REGISTRER POENG'}</p><h2>{currentPlayer?.name}<span> sin tur</span></h2></div><span className="dart-counter">{entryMode === 'total' && gameMode !== 'cricket' ? 'TOTALSUM' : '3 KAST'}</span></div>
               {gameMode === '501' && <button className="checkout-table-toggle" type="button" aria-expanded={checkoutTableOpen} aria-controls="checkout-table" onClick={() => setCheckoutTableOpen((open) => !open)}><span aria-hidden="true">{checkoutTableOpen ? '−' : '+'}</span>{checkoutTableOpen ? 'Skjul utgangstabell' : 'Utgangstabell'}</button>}
               {gameMode === '501' && <section className="checkout-table" id="checkout-table" aria-label="Utgangstabell for 501 med dobbel ut" hidden={!checkoutTableOpen}><div className="checkout-table-heading"><strong>501 · DOBBEL UT</strong><span>Utganger fra 2 til 170</span></div><div className="checkout-table-grid">{CHECKOUT_TABLE.map(({ score, route }) => <div className="checkout-table-row" key={score}><strong>{score}</strong><span>{route}</span></div>)}</div></section>}
