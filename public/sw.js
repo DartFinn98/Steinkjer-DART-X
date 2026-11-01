@@ -1,5 +1,5 @@
-const CACHE_NAME = 'steinkjer-dart-x-v5'
-const APP_SHELL = ['/', '/manifest.webmanifest', '/dart-mark.svg', '/logo.png']
+const CACHE_NAME = 'steinkjer-dart-x-v6'
+const APP_SHELL = ['/', '/manifest.webmanifest', '/dart-mark.svg', '/logo.png', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png']
 
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {

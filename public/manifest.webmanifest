@@ -1,11 +1,21 @@
 {
   "name": "Steinkjer DART-X",
   "short_name": "DART-X",
-  "description": "Poengtavle for 501 med stålpiler.",
+  "description": "Poengtavle for Steinkjer Dartklubb.",
   "lang": "nb",
+  "id": "/",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#f4f1e9",
   "theme_color": "#f4f1e9",
-  "icons": [{ "src": "/dart-mark.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+  "categories": ["sports"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/dart-mark.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
 }

@@ -4,6 +4,7 @@ import { getCheckoutHint } from './checkout'
 import { addAdminGuestSignup, addTournamentCupRound, beginGuestSession, deleteAllClubTournaments, deleteClubDocument, deleteClubSignup, deleteClubTournament, deleteSavedMatch, deleteSavedPlayer, downloadClubDocument, editFinishedTournamentMatch, endGuestSession, finishTournamentMatch, getGuestDisplayName, loadClubAdminStatus, loadClubAdmins, loadClubDocuments, loadClubSignups, loadClubTournaments, loadLinkedPlayerProfile, loadPublicRecentMatches, loadRegisteredPlayerNames, loadSavedData, saveClubSignup, saveClubTournament, saveFinishedMatch, saveLinkedPlayerId, savePlayers, saveTournamentMatchProgress, sendMatchReport, setClubAdminRole, syncPendingChanges, undoFinishedTournamentMatch, updateClubSignup, updateTournamentParticipantAvailability, uploadClubDocument, uploadProfileAvatar } from './database'
 import type { ClubAdmin, ClubDocument, ClubSignup, ClubTournament, PendingSyncIssue, SavedData, TournamentGameHistory, TournamentMatch, TournamentMatchProgress, TournamentGamePlayer } from './database'
 import { supabase } from './supabase'
+import { InstallAppButton } from './InstallApp'
 import type { Session } from '@supabase/supabase-js'
 import { summarizePlayer, summarizeTournamentPlayer } from './stats'
 import { applyCricketVisit, CRICKET_TARGETS, hasWonCricket } from './cricket'
@@ -2710,6 +2711,7 @@ function App() {
             <div><dt>STIFTET</dt><dd>16. januar 2026</dd></div>
           </dl>
           <button className="primary-button" type="button" onClick={() => document.querySelector('.guest-entry')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>Prøv poengtavla som gjest <span aria-hidden="true">↗</span></button>
+          <InstallAppButton />
         </div>
         <div className="club-home-results">
           <p className="eyebrow">SISTE KAMPER</p>
@@ -2741,6 +2743,7 @@ function App() {
         </nav>
         <div className="topbar-actions">
           <div className="topbar-meta">{isOnline ? <span className="live-dot" /> : <span className="offline-dot" />} {isOnline ? gameMode === 'cricket' ? 'CRICKET' : `${gameMode} / DOBBEL UT` : 'OFFLINE'} <span className="court-indicator">BANE {courtNumber}</span>{(guestName || !supabase) && <span className="local-mode-tag">{guestName ? `GJEST: ${guestName}` : 'LOKAL MODUS'}</span>}</div>
+          <InstallAppButton className="sign-out-button" />
           {session && <button className="sign-out-button" type="button" onClick={signOut}>Logg ut</button>}
           {guestName && <button className="sign-out-button" type="button" onClick={exitGuest}>Avslutt gjesteøkt</button>}
         </div>

@@ -320,6 +320,9 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .club-home-match-players { overflow-wrap: anywhere; }
 .club-home-results li strong { color: var(--green); font: 600 12px var(--mono); }
 .club-home-empty { color: var(--muted); }
+.install-app { margin-top: 14px; }
+.topbar-actions .install-app { margin-top: 0; }
+.install-app-help { max-width: 360px; margin: 8px 0 0; color: var(--muted); font-size: 14px; }
 @media (max-width: 900px) { .club-home { grid-template-columns: 1fr; gap: 28px; padding: 28px 0 48px; } .club-home h2 { font-size: 30px; } }
 .guest-entry > p { margin: 0; color: var(--muted); font: 10px var(--mono); letter-spacing: 1px; }
 .guest-entry > small { color: var(--muted); font-size: 11px; line-height: 1.5; }
