@@ -18,11 +18,11 @@
 
 * { box-sizing: border-box; }
 #nl-badge-frame { display: none !important; }
-body { min-width: 320px; min-height: 100vh; margin: 0; background: radial-gradient(#1d35281a .7px, transparent .7px); background-size: 9px 9px; }
+body { min-width: 320px; min-height: 100vh; min-height: 100dvh; margin: 0; background: radial-gradient(#1d35281a .7px, transparent .7px); background-size: 9px 9px; }
 button, input { font: inherit; }
 button { color: inherit; }
 button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outline-offset: 3px; }
-.app-shell { min-height: 100vh; padding: 0 7.2vw 44px; }
+.app-shell { min-height: 100vh; min-height: 100dvh; padding: 0 max(7.2vw, env(safe-area-inset-right)) max(44px, env(safe-area-inset-bottom)) max(7.2vw, env(safe-area-inset-left)); }
 .topbar { min-height: 76px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 22px; border-bottom: 1px solid var(--line); }
 .brand { display: inline-flex; align-items: center; gap: 11px; color: var(--ink); font-size: 13px; font-weight: 850; letter-spacing: 1.8px; text-decoration: none; }
 .brand-logo { width: 38px; aspect-ratio: 1; border-radius: 8px; object-fit: cover; }
@@ -55,7 +55,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .player-directory-guest > .eyebrow { margin: 0; }
 .player-directory-guest > p:not(.eyebrow) { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0; }
 .player-directory-guest > small { color: var(--muted); font-size: 11px; line-height: 1.5; }
-.club-evenings-page { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 390px); align-items: center; gap: 8vw; max-width: 1180px; min-height: calc(100vh - 180px); margin: 0 auto; padding: 50px 0 75px; }
+.club-evenings-page { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 390px); align-items: center; gap: 8vw; max-width: 1180px; min-height: calc(100vh - 180px); min-height: calc(100dvh - 180px); margin: 0 auto; padding: 50px 0 75px; }
 .club-evenings-heading h1 { margin: 0; font-family: var(--serif); font-size: clamp(52px, 9vw, 108px); font-weight: 500; line-height: .98; }
 .club-evenings-heading .intro { margin-top: 24px; }
 .club-registration-card { padding: 27px 29px; border: 1px solid #d0d0c6; background: #f8f6efeb; box-shadow: 9px 10px 0 #175c450e; }
@@ -277,8 +277,8 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .database-message { max-width: 1180px; margin: 12px auto 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; color: var(--orange); font-size: 12px; line-height: 1.5; }
 .database-message button { flex: none; padding: 0; border: 0; background: transparent; color: var(--green); font: inherit; font-weight: 700; cursor: pointer; }
 .live-dot { display: inline-block; width: 7px; aspect-ratio: 1; border-radius: 50%; background: #5a9c67; box-shadow: 0 0 0 3px #5a9c671c; }
-.setup-layout { position: relative; min-height: calc(100vh - 120px); display: grid; grid-template-columns: 1fr 390px; align-items: center; gap: 8vw; max-width: 1180px; margin: 0 auto; padding: 55px 0 80px; }
-.bull-off-layout { position: relative; min-height: calc(100vh - 120px); display: grid; grid-template-columns: 1fr 430px; align-items: center; gap: 7vw; max-width: 1180px; margin: 0 auto; padding: 55px 0 80px; }
+.setup-layout { position: relative; min-height: calc(100vh - 120px); min-height: calc(100dvh - 120px); display: grid; grid-template-columns: 1fr 390px; align-items: center; gap: 8vw; max-width: 1180px; margin: 0 auto; padding: 55px 0 80px; }
+.bull-off-layout { position: relative; min-height: calc(100vh - 120px); min-height: calc(100dvh - 120px); display: grid; grid-template-columns: 1fr 430px; align-items: center; gap: 7vw; max-width: 1180px; margin: 0 auto; padding: 55px 0 80px; }
 .setup-copy { position: relative; z-index: 1; padding-bottom: 44px; animation: rise-in 500ms both; }
 .bull-off-copy { position: relative; z-index: 1; padding-bottom: 35px; animation: rise-in 400ms both; }
 .eyebrow { margin: 0 0 17px; color: var(--green); }
@@ -291,7 +291,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .setup-panel { position: relative; z-index: 1; padding: 28px 30px 24px; border: 1px solid #d0d0c6; background: #f8f6efeb; box-shadow: 9px 10px 0 #175c450e; animation: rise-in 500ms 80ms both; }
 .bull-off-panel { padding: 27px 29px 22px; border: 1px solid #d0d0c6; background: #f8f6efeb; box-shadow: 9px 10px 0 #175c450e; animation: rise-in 400ms 70ms both; }
 .auth-shell { min-height: 100vh; }
-.auth-layout { min-height: calc(100vh - 110px); display: grid; grid-template-columns: minmax(0, 1fr) 410px; align-items: center; gap: 8vw; max-width: 1080px; margin: 0 auto; padding: 48px 0 72px; }
+.auth-layout { min-height: calc(100vh - 110px); min-height: calc(100dvh - 110px); display: grid; grid-template-columns: minmax(0, 1fr) 410px; align-items: center; gap: 8vw; max-width: 1080px; margin: 0 auto; padding: 48px 0 72px; }
 .auth-copy { animation: rise-in 400ms both; }
 .auth-copy h1 { margin: 0; font-family: var(--serif); font-size: 160px; font-weight: 500; line-height: .85; }
 .auth-copy .intro { max-width: 360px; }
@@ -573,7 +573,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 @keyframes coin-spin-kron { from { transform: rotateY(0deg); } to { transform: rotateY(1800deg); } }
 @keyframes coin-spin-mynt { from { transform: rotateY(0deg); } to { transform: rotateY(1980deg); } }
 @keyframes rise-in { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .club-evenings-page { grid-template-columns: minmax(0, 1fr); gap: 24px; min-height: auto; padding: 40px 0 55px; }
   .admin-page { gap: 18px; padding: 35px 0 55px; }
   .admin-section-heading { grid-template-columns: minmax(0, 1fr) minmax(165px, 1fr); }
@@ -593,7 +593,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
   .admin-document-list > li { align-items: flex-start; flex-direction: column; }
   .admin-document-list .admin-signup-actions { width: 100%; justify-content: flex-start; }
   .player-profile-page { grid-template-columns: minmax(0, 1fr); gap: 24px; min-height: auto; padding: 40px 0 55px; }
-  .app-shell { padding: 0 22px 32px; }
+  .app-shell { padding: 0 max(22px, env(safe-area-inset-right)) max(32px, env(safe-area-inset-bottom)) max(22px, env(safe-area-inset-left)); }
   .topbar { min-height: 65px; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; padding: 9px 0 0; }
   .topbar-nav { grid-column: 1 / -1; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; }
   .topbar-nav::-webkit-scrollbar { display: none; }
@@ -657,9 +657,12 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
   .topbar-nav { margin: 0 -2px; }
   .topbar-nav-link { padding: 0 9px; font-size: 10px; }
   .topbar-actions { margin-left: auto; }
-  .app-shell { padding-right: 16px; padding-left: 16px; }
+  .app-shell { padding-right: max(16px, env(safe-area-inset-right)); padding-left: max(16px, env(safe-area-inset-left)); }
   .brand { font-size: 11px; letter-spacing: 1.2px; }
   .topbar { min-height: 59px; }
+  .setup-copy h1 { font-size: clamp(72px, 22vw, 100px); }
+  .bull-off-copy h1 { font-size: clamp(58px, 18vw, 76px); }
+  .auth-copy h1 { font-size: clamp(68px, 20vw, 92px); }
   .admin-panel { padding: 18px 15px; }
   .admin-section-heading { grid-template-columns: minmax(0, 1fr); }
   .admin-section-heading > div { grid-column: auto; }
@@ -718,6 +721,26 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
   .history-visits li > strong { grid-column: 1 / -1; grid-row: 2; }
   .player-library-list li { align-items: flex-start; flex-direction: column; padding: 7px 0; }
   .player-library-actions { width: 100%; justify-content: flex-end; }
+}
+@media (min-width: 600px) and (max-width: 900px) {
+  .player-grid:not(.players-1) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .player-card { padding: 13px 14px 11px; }
+  .score-display { font-size: clamp(44px, 8vw, 62px); }
+  .setup-copy h1 { font-size: clamp(76px, 12vw, 108px); }
+  .bull-off-copy h1 { font-size: clamp(64px, 10vw, 82px); }
+}
+@media (orientation: landscape) and (max-height: 600px) and (max-width: 1200px) {
+  .app-shell { padding-right: max(16px, env(safe-area-inset-right)); padding-left: max(16px, env(safe-area-inset-left)); }
+  .topbar { grid-template-areas: "brand actions" "nav nav"; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; padding-top: 6px; }
+  .topbar > .brand { grid-area: brand; min-width: 0; gap: 8px; }
+  .topbar-nav { grid-area: nav; min-width: 0; max-width: 100%; justify-content: flex-start; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+  .topbar-nav::-webkit-scrollbar { display: none; }
+  .topbar-nav-group + .topbar-nav-group { margin-left: 5px; padding-left: 5px; }
+  .topbar-nav-link { min-height: 40px; padding: 0 9px; font-size: 11px; }
+  .topbar-nav-link[aria-current="page"]::after { right: 9px; left: 9px; }
+  .topbar-actions { grid-area: actions; min-width: 0; }
+  .topbar-meta { display: none; }
+  .topbar-actions .sign-out-button { min-height: 36px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
