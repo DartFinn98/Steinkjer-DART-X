@@ -2706,6 +2706,7 @@ function App() {
           <p>Steinkjer Dartklubb er et samlingspunkt for dartentusiaster i Steinkjer-området. Her er alle velkomne, uansett nivå. Det handler om fellesskap, moro og å dele lidenskapen for dart.</p>
           <dl className="club-home-facts">
             <div><dt>KLUBBKVELDER</dt><dd>Mandag og torsdag fra kl. 18:00</dd></div>
+            <div><dt>PÅMELDINGSFRIST</dt><dd>Kl. 17:45</dd></div>
             <div><dt>STED</dt><dd><a href="https://maps.app.goo.gl/uAARNq7qrcukmQ3d8" target="_blank" rel="noreferrer">Ogndalsvegen 143 ↗</a></dd></div>
             <div><dt>PRISER</dt><dd>Klubbkveld: 50 kr for medlemmer, 100 kr for ikke-medlemmer<br />Medlemskontingent: 400 kr</dd></div>
             <div><dt>STIFTET</dt><dd>16. januar 2026</dd></div>
