@@ -13,11 +13,11 @@ export type SavedMatch = {
   playedAt: string
   winnerName: string
   courtNumber?: 1 | 2 | 3 | 4 | 5
-  gameMode?: '501' | 'cricket' | '121'
+  gameMode?: '501' | 'cricket' | '121' | 'stein5kamp'
   bestOfLegs?: 3 | 5 | 7 | 9
   finishMethod?: 'checkout' | 'bull-off'
   legStarterName?: string
-  players: PlayerMatchStats[]
+  players: (PlayerMatchStats & { stein5kampScores?: [number, number, number, number, number] })[]
 }
 
 export type PublicMatch = {
@@ -26,14 +26,14 @@ export type PublicMatch = {
   winnerName: string
   gameMode: string
   bestOfLegs: number | null
-  players: { name: string; legsWon: number }[]
+  players: { name: string; legsWon: number; score?: number }[]
 }
 
 export async function loadPublicRecentMatches(limit = 6): Promise<PublicMatch[]> {
   if (!supabase) return []
   const { data, error } = await supabase.rpc('public_recent_matches', { match_limit: limit })
   if (error || !Array.isArray(data)) return []
-  return data.map((match: { id: string; played_at: string; winner_name: string; game_mode: string; best_of_legs: number | null; players: { name: string; legsWon: number }[] | null }) => ({
+  return data.map((match: { id: string; played_at: string; winner_name: string; game_mode: string; best_of_legs: number | null; players: { name: string; legsWon: number; score?: number }[] | null }) => ({
     id: match.id,
     playedAt: match.played_at,
     winnerName: match.winner_name,

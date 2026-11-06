@@ -8,6 +8,8 @@ import { InstallAppButton } from './InstallApp'
 import { LiveBoards } from './LiveBoards'
 import type { Session } from '@supabase/supabase-js'
 import { summarizePlayer, summarizeTournamentPlayer } from './stats'
+import { Stein5KampGame } from './Stein5KampGame'
+import type { Stein5KampResult } from './Stein5KampGame'
 import { applyCricketVisit, CRICKET_TARGETS, hasWonCricket } from './cricket'
 import type { CricketDart, CricketMarks } from './cricket'
 import { createNextCupRound, drawClubPools, getNextQueuedTournamentMatch, getPoolStandings, getTournamentMatchRefereeSignupId, setTournamentAdvancement } from './tournament'
@@ -21,7 +23,7 @@ type ActiveTournamentMatch = {
   playerTwoId: string
   progressId: string
 }
-type GameMode = '501' | 'cricket' | '121'
+type GameMode = '501' | 'cricket' | '121' | 'stein5kamp'
 type Player = TournamentGamePlayer
 type Snapshot = TournamentGameHistory
 type EntryMode = 'darts' | 'total'
@@ -717,6 +719,9 @@ function countCricketMarks(visits: Visit[]): CricketMarks {
 }
 
 function formatSavedMatchPlayers(match: SavedData['matches'][number]): string {
+  if (match.gameMode === 'stein5kamp') {
+    return match.players.map((player) => `${player.name}: ${player.score} poeng`).join(' · ')
+  }
   if (match.players.some((player) => player.teamId)) {
     return (['A', 'B'] as const).map((teamId) => {
       const members = match.players.filter((player) => player.teamId === teamId)
@@ -1291,7 +1296,11 @@ function App() {
     : players
   const legNumber = legScorePlayers.reduce((total, player) => total + (legsWon[player.id] ?? 0), 0) + 1
   const roundWord = gameMode === '121' ? 'RUNDE' : 'LEGG'
-  const liveBoardActive = Boolean(session) && gamePhase !== 'setup' && players.length > 0
+  const dartHistoryPlayer = winner ?? currentPlayer
+  const dartHistoryLeg = winnerId ? legNumber - 1 : legNumber
+  const dartHistoryVisits = (dartHistoryPlayer?.visits ?? []).filter((visit) => visit.legNumber === dartHistoryLeg)
+  const dartHistoryVisitsShown = dartHistoryVisits.slice(0, 14)
+  const liveBoardActive = Boolean(session) && gamePhase !== 'setup' && players.length > 0 && gameMode !== 'stein5kamp'
   const liveBoardKey = liveBoardActive ? JSON.stringify([courtNumber, gameMode, bestOfLegs, legNumber, activePlayer, matchWinnerId, players.map((player) => [player.name, player.score, player.visits.length, player.teamId]), legsWon]) : ''
   useEffect(() => {
     if (!liveBoardActive) return
@@ -1359,6 +1368,12 @@ function App() {
   function selectGameMode(mode: GameMode) {
     cancelCoinFlip()
     setGameMode(mode)
+    if (mode === 'stein5kamp') {
+      setTeamMode(false)
+      setPlayerCount(2)
+      setRosterSlot((slot) => Math.min(slot, 1))
+      setPlayerNames((current) => [current[0] ?? '', current[1] ?? ''])
+    }
     if (mode === 'cricket' && playerCount === 1) {
       setPlayerCount(2)
       setRosterSlot(0)
@@ -1370,7 +1385,7 @@ function App() {
 
   function beginGame(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (playerCount > 1 && useCoinToss && (coinResult === null || coinStarterIndex === null)) return
+    if (gameMode !== 'stein5kamp' && playerCount > 1 && useCoinToss && (coinResult === null || coinStarterIndex === null)) return
     const roster = names.map((name, index) => ({
       id: `${Date.now()}-${index}`,
       name: name.trim() || `Spiller ${index + 1}`,
@@ -1385,7 +1400,7 @@ function App() {
     setLegsWon(Object.fromEntries(roster.map((player) => [player.id, 0])))
     setMatchWinnerId(null)
     setLegStarterIndex(0)
-    setGamePhase(roster.length > 1 ? 'bull-off' : 'playing')
+    setGamePhase(gameMode === 'stein5kamp' ? 'playing' : roster.length > 1 ? 'bull-off' : 'playing')
     setBullWinnerId('')
     setWinnerId(null)
     setHistory([])
@@ -1848,6 +1863,45 @@ function App() {
   function newGame() {
     if (activeTournamentMatch && matchWinnerId) return
     resetCurrentGame()
+  }
+
+  async function saveStein5KampResult(result: Stein5KampResult) {
+    const highScore = Math.max(...result.totals)
+    const isDraw = result.totals[0] === result.totals[1]
+    const match = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      playedAt: new Date().toISOString(),
+      winnerName: isDraw ? 'Uavgjort' : players[result.totals[0] > result.totals[1] ? 0 : 1].name,
+      courtNumber,
+      gameMode: 'stein5kamp' as const,
+      players: players.slice(0, 2).map((player, index) => ({
+        name: player.name,
+        score: result.totals[index],
+        legsWon: !isDraw && result.totals[index] === highScore ? 1 : 0,
+        average3: 0,
+        pointsScored: 0,
+        dartsThrown: 0,
+        tons: 0,
+        oneEighties: 0,
+        highestVisit: 0,
+        fastestCheckoutDarts: null,
+        first9Average: 0,
+        highestCheckout: 0,
+        visits: [],
+        stein5kampScores: result.gameScores[index],
+      })),
+    }
+
+    try {
+      await saveFinishedMatch(match)
+      setSavedData(await loadSavedData())
+      setDatabaseMessage('')
+    } catch (error) {
+      setDatabaseMessage(error instanceof Error
+        ? `5-kampresultatet kunne ikke lagres: ${error.message}`
+        : '5-kampresultatet kunne ikke lagres.')
+      throw error
+    }
   }
 
   function startNextLeg() {
@@ -2768,7 +2822,7 @@ function App() {
           <p className="eyebrow">SISTE KAMPER</p>
           {publicMatches.length === 0
             ? <p className="club-home-empty">{isOnline ? 'Ingen kamper å vise ennå.' : 'Du er offline.'}</p>
-            : <ul>{publicMatches.map((match) => <li key={match.id}><span className="club-home-match-date">{new Intl.DateTimeFormat('nb-NO', { day: 'numeric', month: 'short' }).format(new Date(match.playedAt))}</span><span className="club-home-match-players">{match.players.length > 0 ? match.players.map((player) => `${player.name} ${player.legsWon}`).join(' – ') : match.winnerName}</span><strong>{match.winnerName} vant</strong></li>)}</ul>}
+            : <ul>{publicMatches.map((match) => <li key={match.id}><span className="club-home-match-date">{new Intl.DateTimeFormat('nb-NO', { day: 'numeric', month: 'short' }).format(new Date(match.playedAt))}</span><span className="club-home-match-players">{match.players.length > 0 ? match.players.map((player) => `${player.name} ${match.gameMode === 'stein5kamp' ? player.score ?? 0 : player.legsWon}`).join(' – ') : match.winnerName}</span><strong>{match.winnerName === 'Uavgjort' ? 'Uavgjort' : `${match.winnerName} vant`}</strong></li>)}</ul>}
         </div>
       </section>
       <LiveBoards compact />
@@ -3097,27 +3151,29 @@ function App() {
         <section className="setup-layout">
           <div className="setup-copy">
             <p className="eyebrow">KAMPROM / 01</p>
-            <h1>{gameMode === 'cricket' ? 'Cricket' : gameMode}<span className="title-period">.</span></h1>
-            <p className="intro">{gameMode === 'cricket' ? 'Lukk feltene fra 15 til 20 og bull før motstanderen.' : gameMode === '121' ? 'Start på 121 poeng. Avslutt med en dobbel.' : 'Følg poengene. Se hvem som leder.'}</p>
-            <div className="rules-line"><span>{gameMode === 'cricket' ? '15–20 + BULL' : gameMode}</span><i /> {gameMode === 'cricket' ? 'TRE TREFF LUKKER' : 'DOBBEL UT'} <i /> {gameMode === 'cricket' ? 'FLERE POENG VINNER' : 'FØRST TIL NULL'}</div>
+            <h1>{gameMode === 'cricket' ? 'Cricket' : gameMode === 'stein5kamp' ? 'Steins 5-kamp' : gameMode}<span className="title-period">.</span></h1>
+            <p className="intro">{gameMode === 'cricket' ? 'Lukk feltene fra 15 til 20 og bull før motstanderen.' : gameMode === '121' ? 'Start på 121 poeng. Avslutt med en dobbel.' : gameMode === 'stein5kamp' ? 'Konkurrer i fem dartspill. Høyest sammenlagt poengsum vinner.' : 'Følg poengene. Se hvem som leder.'}</p>
+            <div className="rules-line"><span>{gameMode === 'cricket' ? '15–20 + BULL' : gameMode === 'stein5kamp' ? 'FEM SPILL' : gameMode}</span><i /> {gameMode === 'cricket' ? 'TRE TREFF LUKKER' : gameMode === 'stein5kamp' ? 'TO SPILLERE' : 'DOBBEL UT'} <i /> {gameMode === 'cricket' ? 'FLERE POENG VINNER' : gameMode === 'stein5kamp' ? 'HØYEST SUM VINNER' : 'FØRST TIL NULL'}</div>
           </div>
           <form className="setup-panel" onSubmit={beginGame}>
             <div className="panel-heading"><div><p className="eyebrow">NY KAMP</p><h2>Hvem spiller?</h2></div><span className="panel-index">01 — 02</span></div>
-            <fieldset className="player-count">
+            {gameMode === 'stein5kamp'
+              ? <p className="five-setup-note">Steins 5-kamp spilles av to spillere gjennom fem poengspill.</p>
+              : <fieldset className="player-count">
               <legend>ANTALL SPILLERE</legend>
               <div className="count-options">{[1, 2, 3, 4].filter((count) => gameMode !== 'cricket' || count > 1).map((count) => <button key={count} type="button" disabled={teamMode && count !== 4} aria-pressed={playerCount === count} className={playerCount === count ? 'count-option selected' : 'count-option'} onClick={() => { cancelCoinFlip(); setPlayerCount(count); setRosterSlot((slot) => Math.min(slot, count - 1)); setCoinResult(null); setCoinStarterIndex(null) }}>{count}</button>)}</div>
-            </fieldset>
-            <label className="manual-double-toggle team-mode-toggle"><input type="checkbox" checked={teamMode} onChange={(event) => { const enabled = event.target.checked; cancelCoinFlip(); if (enabled) teamPreviousPlayerCount.current = playerCount; const nextPlayerCount = enabled ? 4 : teamPreviousPlayerCount.current; setTeamMode(enabled); setPlayerCount(nextPlayerCount); setPlayerNames((current) => Array.from({ length: nextPlayerCount }, (_, index) => current[index] ?? '')); setRosterSlot((slot) => Math.min(slot, nextPlayerCount - 1)); setCoinResult(null); setCoinStarterIndex(null) }} /><span className="custom-check" aria-hidden="true" />Spill dobler · 2 mot 2</label>
+            </fieldset>}
+            {gameMode !== 'stein5kamp' && <label className="manual-double-toggle team-mode-toggle"><input type="checkbox" checked={teamMode} onChange={(event) => { const enabled = event.target.checked; cancelCoinFlip(); if (enabled) teamPreviousPlayerCount.current = playerCount; const nextPlayerCount = enabled ? 4 : teamPreviousPlayerCount.current; setTeamMode(enabled); setPlayerCount(nextPlayerCount); setPlayerNames((current) => Array.from({ length: nextPlayerCount }, (_, index) => current[index] ?? '')); setRosterSlot((slot) => Math.min(slot, nextPlayerCount - 1)); setCoinResult(null); setCoinStarterIndex(null) }} /><span className="custom-check" aria-hidden="true" />Spill dobler · 2 mot 2</label>}
             <fieldset className="match-format game-mode-format">
               <legend>SPILLTYPE</legend>
-              <div className="game-mode-options">{([{ id: '501', label: '501' }, { id: 'cricket', label: 'Cricket' }, { id: '121', label: '121 utgang' }] as const).map((mode) => <button key={mode.id} type="button" aria-pressed={gameMode === mode.id} className={gameMode === mode.id ? 'format-option selected' : 'format-option'} onClick={() => selectGameMode(mode.id)}>{mode.label}</button>)}</div>
-              <p>{gameMode === 'cricket' ? 'Tre treff lukker 15–20 og bull. Treff på lukkede felt gir poeng så lenge motstanderen har feltet åpent.' : gameMode === '121' ? 'Hver runde starter på 121. Dobbel ut gjelder.' : 'Først til valgt antall legg vinner kampen.'}</p>
+              <div className="game-mode-options">{([{ id: '501', label: '501' }, { id: 'cricket', label: 'Cricket' }, { id: '121', label: '121 utgang' }, { id: 'stein5kamp', label: 'Steins 5-kamp' }] as const).map((mode) => <button key={mode.id} type="button" aria-pressed={gameMode === mode.id} className={gameMode === mode.id ? 'format-option selected' : 'format-option'} onClick={() => selectGameMode(mode.id)}>{mode.label}</button>)}</div>
+              <p>{gameMode === 'cricket' ? 'Tre treff lukker 15–20 og bull. Treff på lukkede felt gir poeng så lenge motstanderen har feltet åpent.' : gameMode === '121' ? 'Hver runde starter på 121. Dobbel ut gjelder.' : gameMode === 'stein5kamp' ? 'Superscore, Double Machine, Litt her og litt der, Utgangenes konge og Bullworker.' : 'Først til valgt antall legg vinner kampen.'}</p>
             </fieldset>
-            <fieldset className="match-format">
+            {gameMode !== 'stein5kamp' && <fieldset className="match-format">
               <legend>KAMPFORMAT</legend>
               <div className="format-options">{([3, 5, 7, 9] as const).map((format) => <button key={format} type="button" aria-pressed={bestOfLegs === format} className={bestOfLegs === format ? 'format-option selected' : 'format-option'} onClick={() => setBestOfLegs(format)}>Best av {format}</button>)}</div>
               <p>Først til {Math.ceil(bestOfLegs / 2)} {gameMode === '121' ? Math.ceil(bestOfLegs / 2) === 1 ? 'runde' : roundWordPlural : Math.ceil(bestOfLegs / 2) === 1 ? 'legg' : roundWordPlural} vinner kampen.</p>
-            </fieldset>
+            </fieldset>}
             <fieldset className="court-select">
               <legend>BANE</legend>
               <div className="count-options court-options">{([1, 2, 3, 4, 5] as const).map((court) => <button key={court} type="button" aria-pressed={courtNumber === court} className={courtNumber === court ? 'count-option selected' : 'count-option'} onClick={() => setCourtNumber(court)}>{court}</button>)}</div>
@@ -3143,30 +3199,37 @@ function App() {
                 })}</ul>
               </> : <p className="player-library-empty">Spillerlisten er tom. Legg til et navn for å begynne.</p>}
             </section>
-            {playerCount > 1 && <div className="coin-toss-control">
+            {playerCount > 1 && gameMode !== 'stein5kamp' && <div className="coin-toss-control">
               <label className="manual-double-toggle"><input type="checkbox" checked={useCoinToss} onChange={(event) => { cancelCoinFlip(); setUseCoinToss(event.target.checked); setCoinResult(null); setCoinStarterIndex(null) }} /><span className="custom-check" aria-hidden="true" />Bruk myntkast</label>
               {useCoinToss ? <><p className="coin-choice-label">KAST MYNTEN FOR Å TREKKE FØRSTE KASTER</p>
                 <CoinTossButton disabled={false} flipping={coinFlipping} landingSide={coinLandingSide} result={coinResult} onClick={tossCoin} />
                 <p role="status">{coinFlipping ? 'Mynten snurrer …' : coinResult === null ? 'Mynten trekker tilfeldig hvem som kaster først mot bull.' : `${coinResult === 'kron' ? 'Kron' : 'Mynt'} kom opp. ${coinStarterIndex === null ? 'Første kaster er trukket.' : names[coinStarterIndex] || `Spiller ${coinStarterIndex + 1}`} kaster først mot bull.`}</p></> : <p role="status">Myntkast er av. {names[0] || 'Spiller 1'} kaster først mot bull.</p>}
             </div>}
-            <button className="primary-button start-button" type="submit" disabled={playerCount > 1 && useCoinToss && coinStarterIndex === null}>{playerCount > 1 ? 'Start bullkast' : 'Start kamp'} <span aria-hidden="true">↗</span></button>
-            <p className="form-note">{playerCount > 1 ? useCoinToss ? 'Myntkastet bestemmer rekkefølgen for bullkastet. ' : 'Uten myntkast følger rekkefølgen spillerlisten. ' : ''}Spillernavn lagres automatisk.</p>
+            <button className="primary-button start-button" type="submit" disabled={gameMode !== 'stein5kamp' && playerCount > 1 && useCoinToss && coinStarterIndex === null}>{gameMode === 'stein5kamp' ? 'Start 5-kamp' : playerCount > 1 ? 'Start bullkast' : 'Start kamp'} <span aria-hidden="true">↗</span></button>
+            <p className="form-note">{gameMode === 'stein5kamp' ? 'Resultatet lagres i kamparkivet når alle fem spillene er registrert. ' : playerCount > 1 ? useCoinToss ? 'Myntkastet bestemmer rekkefølgen for bullkastet. ' : 'Uten myntkast følger rekkefølgen spillerlisten. ' : ''}Spillernavn lagres automatisk.</p>
           </form>
           {savedData.matches.length > 0 && <section className="saved-history" aria-label="Kamphistorikk">
             <div className="saved-history-heading"><div><p className="eyebrow">LAGRET HISTORIKK</p><h2>Kamparkiv</h2></div><span>{filteredSavedMatches.length} / {savedData.matches.length} KAMPER</span></div>
             <div className="history-filters">
               <label className="history-filter-search"><span>SØK SPILLER ELLER LAG</span><input type="search" value={historySearch} onChange={(event) => setHistorySearch(event.target.value)} placeholder="Navn" /></label>
-              <label><span>SPILLTYPE</span><select value={historyGameMode} onChange={(event) => setHistoryGameMode(event.target.value as GameMode | 'all')}><option value="all">Alle</option><option value="501">501</option><option value="cricket">Cricket</option><option value="121">121 utgang</option></select></label>
+              <label><span>SPILLTYPE</span><select value={historyGameMode} onChange={(event) => setHistoryGameMode(event.target.value as GameMode | 'all')}><option value="all">Alle</option><option value="501">501</option><option value="cricket">Cricket</option><option value="121">121 utgang</option><option value="stein5kamp">Steins 5-kamp</option></select></label>
               <label><span>BANE</span><select value={historyCourt} onChange={(event) => setHistoryCourt(event.target.value === 'all' ? 'all' : Number(event.target.value) as CourtNumber)}><option value="all">Alle</option>{([1, 2, 3, 4, 5] as const).map((court) => <option key={court} value={court}>Bane {court}</option>)}</select></label>
             </div>
             {filteredSavedMatches.length > 0 ? <ul className="saved-history-list">{filteredSavedMatches.map((match) => <li key={match.id}>
-              <div className="history-match-main"><time dateTime={match.playedAt}>{new Intl.DateTimeFormat('nb-NO', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(match.playedAt))}</time><strong>{match.winnerName} vant</strong></div>
-              <span className="history-match-summary">Bane {match.courtNumber ?? 1} · {match.gameMode === 'cricket' ? 'Cricket' : match.gameMode === '121' ? '121 utgang' : '501'} · {formatSavedMatchPlayers(match)}{match.bestOfLegs ? ` · Best av ${match.bestOfLegs}` : ''}</span>
+              <div className="history-match-main"><time dateTime={match.playedAt}>{new Intl.DateTimeFormat('nb-NO', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(match.playedAt))}</time><strong>{match.winnerName === 'Uavgjort' ? 'Uavgjort' : `${match.winnerName} vant`}</strong></div>
+              <span className="history-match-summary">Bane {match.courtNumber ?? 1} · {match.gameMode === 'cricket' ? 'Cricket' : match.gameMode === '121' ? '121 utgang' : match.gameMode === 'stein5kamp' ? 'Steins 5-kamp' : '501'} · {formatSavedMatchPlayers(match)}{match.bestOfLegs ? ` · Best av ${match.bestOfLegs}` : ''}</span>
               <div className="history-match-actions"><button className="history-details-button" type="button" onClick={() => setSelectedMatch(match)}>Vis detaljer</button>{match.finishMethod && <button className="reopen-match-button" type="button" onClick={() => reopenSavedMatch(match)}>Åpne kampen igjen</button>}{matchPendingDeleteId === match.id ? <><span className="history-delete-prompt" role="status">Slette kampen?</span><button className="history-delete-confirm" type="button" onClick={() => void removeSavedMatch(match.id)}>Ja, slett</button><button className="history-delete-cancel" type="button" onClick={() => setMatchPendingDeleteId(null)}>Avbryt</button></> : <button className="history-delete-button" type="button" aria-label={`Slett kamp vunnet av ${match.winnerName}`} onClick={() => setMatchPendingDeleteId(match.id)}>Slett</button>}</div>
             </li>)}</ul> : <p className="saved-history-empty">Ingen kamper passer til søket.</p>}
           </section>}
-          <div className="setup-stamp" aria-hidden="true">NORSK<br />DART<br /><b>501</b></div>
+          <div className="setup-stamp" aria-hidden="true">NORSK<br />DART<br /><b>{gameMode === 'stein5kamp' ? '5K' : '501'}</b></div>
         </section>
+      ) : gameMode === 'stein5kamp' && gamePhase === 'playing' ? (
+        <Stein5KampGame
+          key={players.map((player) => player.id).join('-')}
+          players={[players[0]?.name ?? 'Spiller 1', players[1]?.name ?? 'Spiller 2']}
+          onExit={newGame}
+          onFinish={saveStein5KampResult}
+        />
       ) : gamePhase === 'bull-off' ? (
         <section className="bull-off-layout">
           <div className="bull-off-copy">
@@ -3209,6 +3272,8 @@ function App() {
           </div>
           {activeTournamentMatch && <div className={`tournament-resume-status${tournamentMatchMessage.includes('ikke') ? ' is-error' : ''}`} role={tournamentMatchMessage.includes('ikke') ? 'alert' : 'status'}><span>{tournamentMatchMessage || 'Turneringskampen lagres automatisk, så den kan fortsettes senere.'}{activeTournamentRefereeName && <strong>Dommer: {activeTournamentRefereeName}</strong>}</span>{tournamentMatchMessage.includes('gjenopptakelse') && !matchWinnerId && <button className="text-button" type="button" onClick={retryTournamentProgressSave}>Prøv lagring på nytt</button>}</div>}
           {gameMode === '501' && dartLimitBullOff && !winnerId && <div className="bull-trigger" role="alert"><div><span>42 PILER HVER BRUKT</span><strong>Leggen er ikke avgjort. Kast mot bull, og trykk på navnet til den som kom nærmest.</strong></div></div>}
+          <div className="game-body">
+          <div className="game-main-column">
           <div className={`player-grid players-${players.length}`}>
             {players.map((player, index) => {
               const isActive = index === activePlayer && !winnerId
@@ -3261,17 +3326,41 @@ function App() {
               <p className="entry-message" aria-live="polite">{message || (gameMode === 'cricket' ? 'Lukk alle feltene og ha minst like mange poeng som motstanderen.' : entryMode === 'total' ? 'Ved totalsum lik poengene du har igjen, markeres dobbel automatisk. Du kan endre avhukingen ved behov.' : 'Velg enkel, dobbel, trippel eller miss (bom) for hver pil.')}</p>
             </form>
           )}
+          </div>
+          <aside className="dart-history-panel" aria-label={`Kastoversikt for ${dartHistoryPlayer?.name ?? 'spilleren som kaster'}`}>
+            <div className="dart-history-heading">
+              <div><p className="eyebrow">KASTOVERSIKT</p><h2>{dartHistoryPlayer?.name ?? 'Ingen spiller'}</h2></div>
+              <span>{dartHistoryVisitsShown.length} / 14<br />TURER</span>
+            </div>
+            <p className="dart-history-context">{roundWord} {dartHistoryLeg} · {gameMode === '501' ? 'Inntil 42 piler før bull' : 'Registrerte turer'}</p>
+            <ol className="dart-history-list">
+              {Array.from({ length: 14 }, (_, index) => {
+                const visit = dartHistoryVisitsShown[index]
+                return <li className={`dart-history-entry${visit ? visit.bust ? ' is-bust' : '' : ' is-empty'}`} key={`visit-${index + 1}`}>
+                  <span>TUR {index + 1}</span>
+                  <strong>{visit ? visit.bust ? 'BUST' : visit.total : '—'}</strong>
+                  {visit && <small>{visit.bust ? 'BUST · ' : ''}{visit.dartsThrown} {visit.dartsThrown === 1 ? 'PIL' : 'PILER'}</small>}
+                </li>
+              })}
+            </ol>
+            {dartHistoryVisits.length > 14 && <p className="dart-history-note">Viser de første 14 turene i leggen.</p>}
+            {dartHistoryVisits.some((visit) => !visit.darts) && <p className="dart-history-note">Poengene vises samlet per tur. Pilpoeng er ikke registrert enkeltvis.</p>}
+          </aside>
+          </div>
           <div className="game-footer"><span>{gameMode === 'cricket' ? <>15–20 + BULL <i /> TRE TREFF</> : <>{gameMode} <i /> DOBBEL UT</>}</span><span>ANGRE RULLER TILBAKE SISTE TUR</span></div>
         </section>
       )}
       {selectedMatch && <div className="history-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedMatch(null) }}><section className="history-dialog" role="dialog" aria-modal="true" aria-labelledby="history-dialog-title" tabIndex={-1} onKeyDown={(event) => { if (event.key === 'Escape') setSelectedMatch(null) }}>
-        <header className="history-dialog-heading"><div><p className="eyebrow">ARKIVERT KAMP · BANE {selectedMatch.courtNumber ?? 1}</p><h2 id="history-dialog-title">{selectedMatch.winnerName} vant</h2><p>{new Intl.DateTimeFormat('nb-NO', { dateStyle: 'full', timeStyle: 'short' }).format(new Date(selectedMatch.playedAt))} · {selectedMatch.gameMode === 'cricket' ? 'Cricket' : selectedMatch.gameMode === '121' ? '121 utgang' : '501'}{selectedMatch.bestOfLegs ? ` · Best av ${selectedMatch.bestOfLegs}` : ''}{selectedMatch.finishMethod ? ` · ${selectedMatch.finishMethod === 'bull-off' ? 'Bullkast' : 'Dobbel ut'}` : ''}</p></div><button className="text-button" type="button" onClick={() => setSelectedMatch(null)}>Lukk</button></header>
+        <header className="history-dialog-heading"><div><p className="eyebrow">ARKIVERT KAMP · BANE {selectedMatch.courtNumber ?? 1}</p><h2 id="history-dialog-title">{selectedMatch.winnerName === 'Uavgjort' ? 'Kampen endte uavgjort.' : `${selectedMatch.winnerName} vant`}</h2><p>{new Intl.DateTimeFormat('nb-NO', { dateStyle: 'full', timeStyle: 'short' }).format(new Date(selectedMatch.playedAt))} · {selectedMatch.gameMode === 'cricket' ? 'Cricket' : selectedMatch.gameMode === '121' ? '121 utgang' : selectedMatch.gameMode === 'stein5kamp' ? 'Steins 5-kamp' : '501'}{selectedMatch.bestOfLegs ? ` · Best av ${selectedMatch.bestOfLegs}` : ''}{selectedMatch.finishMethod ? ` · ${selectedMatch.finishMethod === 'bull-off' ? 'Bullkast' : 'Dobbel ut'}` : ''}</p></div><button className="text-button" type="button" onClick={() => setSelectedMatch(null)}>Lukk</button></header>
         {selectedMatch.legStarterName && <p className="history-dialog-starter">Startet på {selectedMatch.legStarterName}</p>}
         <div className="history-player-details">{selectedMatch.players.map((player) => <article className="history-player-detail" key={player.name}>
-          <div className="history-player-heading"><h3>{player.teamId && <span>LAG {player.teamId} · </span>}{player.name}</h3><strong>{player.legsWon ?? 0} {selectedMatch.gameMode === '121' ? (player.legsWon === 1 ? 'runde' : 'runder') : 'legg'}</strong></div>
-          <dl className="history-player-stats"><div><dt>SLUTTPOENG</dt><dd>{player.score}</dd></div><div><dt>3-PILSSNITT</dt><dd>{(player.average3 ?? 0).toFixed(1)}</dd></div><div><dt>PILER</dt><dd>{player.dartsThrown ?? 0}</dd></div><div><dt>FØRSTE 9</dt><dd>{(player.first9Average ?? 0).toFixed(1)}</dd></div><div><dt>HØYESTE</dt><dd>{player.highestVisit ?? 0}</dd></div><div><dt>HØYESTE UT</dt><dd>{player.highestCheckout || '—'}</dd></div><div><dt>140+</dt><dd>{player.tons140 ?? 0}</dd></div><div><dt>180</dt><dd>{player.oneEighties ?? 0}</dd></div><div><dt>RASK UTGANG</dt><dd>{player.fastestCheckoutDarts ?? '—'}</dd></div></dl>
-          <h4>TURER</h4>
-          {(player.visits ?? []).length > 0 ? <ol className="history-visits">{(player.visits ?? []).map((visit, index) => <li key={`${visit.legNumber}-${index}`}><span>{selectedMatch.gameMode === '121' ? 'RUNDE' : 'LEGG'} {visit.legNumber} · TUR {index + 1}</span><strong>{formatSavedVisit(visit)}</strong><span>{visit.bust ? 'BUST' : visit.checkout ? 'UTGANG' : `${visit.total} POENG`} · {visit.dartsThrown ?? 3} PILER</span></li>)}</ol> : <p className="history-no-visits">Ingen turer ble lagret for denne kampen.</p>}
+          <div className="history-player-heading"><h3>{player.teamId && <span>LAG {player.teamId} · </span>}{player.name}</h3><strong>{selectedMatch.gameMode === 'stein5kamp' ? `${player.score} poeng` : `${player.legsWon ?? 0} ${selectedMatch.gameMode === '121' ? (player.legsWon === 1 ? 'runde' : 'runder') : 'legg'}`}</strong></div>
+          {selectedMatch.gameMode === 'stein5kamp' ? player.stein5kampScores
+            ? <ol className="five-history-scores">{player.stein5kampScores.map((score, index) => <li key={index}><span>{['Superscore', 'Double Machine', 'Litt her og litt der', 'Utgangenes konge', 'Bullworker'][index]}</span><strong>{score} poeng</strong></li>)}</ol>
+            : <p className="history-no-visits">Detaljert poengfordeling er ikke tilgjengelig for denne kampen.</p>
+            : <><dl className="history-player-stats"><div><dt>SLUTTPOENG</dt><dd>{player.score}</dd></div><div><dt>3-PILSSNITT</dt><dd>{(player.average3 ?? 0).toFixed(1)}</dd></div><div><dt>PILER</dt><dd>{player.dartsThrown ?? 0}</dd></div><div><dt>FØRSTE 9</dt><dd>{(player.first9Average ?? 0).toFixed(1)}</dd></div><div><dt>HØYESTE</dt><dd>{player.highestVisit ?? 0}</dd></div><div><dt>HØYESTE UT</dt><dd>{player.highestCheckout || '—'}</dd></div><div><dt>140+</dt><dd>{player.tons140 ?? 0}</dd></div><div><dt>180</dt><dd>{player.oneEighties ?? 0}</dd></div><div><dt>RASK UTGANG</dt><dd>{player.fastestCheckoutDarts ?? '—'}</dd></div></dl>
+            <h4>TURER</h4>
+            {(player.visits ?? []).length > 0 ? <ol className="history-visits">{(player.visits ?? []).map((visit, index) => <li key={`${visit.legNumber}-${index}`}><span>{selectedMatch.gameMode === '121' ? 'RUNDE' : 'LEGG'} {visit.legNumber} · TUR {index + 1}</span><strong>{formatSavedVisit(visit)}</strong><span>{visit.bust ? 'BUST' : visit.checkout ? 'UTGANG' : `${visit.total} POENG`} · {visit.dartsThrown ?? 3} PILER</span></li>)}</ol> : <p className="history-no-visits">Ingen turer ble lagret for denne kampen.</p>}</>}
         </article>)}</div>
       </section></div>}
       {scoreEditPlayer && <div className="score-edit-backdrop"><section className="score-edit-dialog" role="dialog" aria-modal="true" aria-labelledby="score-edit-title">

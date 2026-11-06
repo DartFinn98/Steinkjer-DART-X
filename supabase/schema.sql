@@ -9,7 +9,7 @@ create table if not exists public.matches (
   played_at timestamptz not null default now(),
   winner_name text not null,
   court_number smallint not null default 1 check (court_number between 1 and 5),
-  game_mode text not null default '501' check (game_mode in ('501', 'cricket', '121')),
+  game_mode text not null default '501' check (game_mode in ('501', 'cricket', '121', 'stein5kamp')),
   best_of_legs smallint check (best_of_legs in (3, 5, 7, 9)),
   finish_method text check (finish_method in ('checkout', 'bull-off')),
   leg_starter_name text,
@@ -180,7 +180,9 @@ set public = false,
 alter table public.matches add column if not exists finish_method text;
 alter table public.matches add column if not exists leg_starter_name text;
 alter table public.matches add column if not exists court_number smallint not null default 1 check (court_number between 1 and 5);
-alter table public.matches add column if not exists game_mode text not null default '501' check (game_mode in ('501', 'cricket', '121'));
+alter table public.matches add column if not exists game_mode text not null default '501';
+alter table public.matches drop constraint if exists matches_game_mode_check;
+alter table public.matches add constraint matches_game_mode_check check (game_mode in ('501', 'cricket', '121', 'stein5kamp'));
 alter table public.matches drop constraint if exists matches_best_of_legs_check;
 alter table public.matches add constraint matches_best_of_legs_check check (best_of_legs in (3, 5, 7, 9));
 
@@ -851,7 +853,7 @@ as $$
     m.game_mode,
     m.best_of_legs,
     coalesce((
-      select jsonb_agg(jsonb_build_object('name', p ->> 'name', 'legsWon', coalesce((p ->> 'legsWon')::int, 0)))
+      select jsonb_agg(jsonb_build_object('name', p ->> 'name', 'legsWon', coalesce((p ->> 'legsWon')::int, 0), 'score', coalesce((p ->> 'score')::int, 0)))
       from jsonb_array_elements(m.players) as p
     ), '[]'::jsonb) as players
   from public.matches m
