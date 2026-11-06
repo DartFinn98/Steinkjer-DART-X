@@ -22,10 +22,11 @@ type GameEvaluation = {
 }
 
 const SECTORS = [12, 3, 20, 11, 15, 1, 19]
+const DOUBLE_TARGETS = ['D16', 'D13', 'D3', 'D20', 'D11', 'D5', 'D10']
 const GAME_NAMES = ['Superscore', 'Double Machine', 'Litt her og litt der', 'Utgangenes konge', 'Bullworker']
 const GAME_DESCRIPTIONS = [
   'Kast 3 piler i hver av 7 runder. Poeng per runde: 61–99 = 1, 100–130 = 2, 131–159 = 4, 160–180 = 6.',
-  'Tell doble treff i 7 runder. Hvert treff gir 2 poeng, maksimalt 3 treff per runde.',
+  'Kast 3 piler på dobbel i hver runde: D16, D13, D3, D20, D11, D5 og D10. Hvert treff gir 2 poeng, maksimalt 3 treff per runde.',
   'Kast mot sektorene 12, 3, 20, 11, 15, 1 og 19. Trippel gir 3 poeng, dobbel 2 og singel 1. Maksimalt 3 treff per sektor.',
   'Start på 170 poeng. Hver spiller får to forsøk på inntil 9 piler. Utgang på 1–3 piler gir 30 poeng, 4–6 gir 15 og 7–9 gir 2. Begge forsøk teller.',
   'Kast 3 piler mot bull i 7 runder. Bullseye gir 2 poeng, ytre bull 1. Maksimalt 3 treff per runde.',
@@ -236,10 +237,10 @@ export function Stein5KampGame({ players, onFinish, onExit }: Props) {
       const max = activeGame === 0 ? 180 : 3
       return <div className="five-round-list">
         {playerEntries[key].map((value, index) => <div className="five-round-row" key={index}>
-          <span>Runde {index + 1}</span>
+          <span>{activeGame === 1 ? `Runde ${index + 1} · ${DOUBLE_TARGETS[index]}` : `Runde ${index + 1}`}</span>
           <NumberField
             disabled={readOnly}
-            label={`${players[playerIndex]}, runde ${index + 1}${activeGame === 0 ? ', score' : ', doble treff'}`}
+            label={`${players[playerIndex]}, runde ${index + 1}${activeGame === 0 ? ', score' : `, treff på ${DOUBLE_TARGETS[index]}`}`}
             max={max}
             onChange={(next) => setListValue(key, index, next)}
             value={value}
