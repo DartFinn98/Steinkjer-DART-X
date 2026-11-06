@@ -74,6 +74,13 @@ export async function clearLiveBoard(courtNumber: number) {
   await supabase.from('live_boards').delete().eq('court_number', courtNumber)
 }
 
+export async function deleteLiveBoard(courtNumber: number) {
+  if (!supabase) throw new Error('Supabase er ikke konfigurert.')
+  const { data, error } = await supabase.from('live_boards').delete().eq('court_number', courtNumber).select('court_number')
+  if (error) throw error
+  if (!data || data.length === 0) throw new Error('Live-kampen ble ikke slettet. Den kan allerede være borte, eller du mangler tilgang.')
+}
+
 export async function loadLiveBoards(): Promise<LiveBoard[]> {
   if (!supabase) return []
   const { data, error } = await supabase.from('live_boards').select('court_number, payload, updated_at').order('court_number')

@@ -2858,7 +2858,7 @@ function App() {
       {databaseMessage && <div className="database-message" role="status"><span>{databaseMessage}</span><button type="button" aria-label="Skjul varsel" onClick={() => setDatabaseMessage('')}>Lukk</button></div>}
 
       {appSection === 'live' ? (
-        <LiveBoards />
+        <LiveBoards canDelete={isClubAdmin} />
       ) : appSection === 'players' ? (
         <section className="player-directory-page">
           <div className="club-evenings-heading">

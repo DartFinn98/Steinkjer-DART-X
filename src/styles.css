@@ -350,6 +350,9 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .live-player-legs { font-weight: 700; }
 .ton-highlight { color: var(--ton-orange); font-weight: 800; }
 .live-finished { margin: 0; font-weight: 700; }
+.live-delete-button { min-height: 40px; padding: 0 12px; border: 1px solid #b4412f; border-radius: 7px; background: transparent; color: #8f3526; font-size: 13px; font-weight: 700; cursor: pointer; }
+.live-delete-button:hover:not(:disabled) { background: #b4412f14; }
+.live-delete-button:disabled { cursor: wait; opacity: .6; }
 @media (max-width: 600px) {
   .live-boards-header { align-items: flex-start; flex-direction: column; gap: 10px; }
   .live-boards-controls { width: 100%; justify-content: space-between; gap: 8px; }

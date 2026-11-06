@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { loadLiveBoards } from './database'
+import { deleteLiveBoard, loadLiveBoards } from './database'
 import type { LiveBoard } from './database'
 
-export function LiveBoards({ compact = false }: { compact?: boolean }) {
+export function LiveBoards({ compact = false, canDelete = false }: { compact?: boolean; canDelete?: boolean }) {
   const [boards, setBoards] = useState<LiveBoard[]>([])
+  const [deletingCourt, setDeletingCourt] = useState<number | null>(null)
+  const [deleteError, setDeleteError] = useState('')
   const [loaded, setLoaded] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [refreshing, setRefreshing] = useState(false)
@@ -35,6 +37,21 @@ export function LiveBoards({ compact = false }: { compact?: boolean }) {
     }
   }, [])
 
+  async function removeBoard(board: LiveBoard) {
+    if (deletingCourt !== null) return
+    if (!window.confirm(`Slette live-kampen på bane ${board.courtNumber}? Den forsvinner fra oversikten, men en kamp som fortsatt pågår kan dukke opp igjen ved neste poengføring.`)) return
+    setDeletingCourt(board.courtNumber)
+    setDeleteError('')
+    try {
+      await deleteLiveBoard(board.courtNumber)
+      if (isMounted.current) setBoards((current) => current.filter((item) => item.courtNumber !== board.courtNumber))
+    } catch (error) {
+      if (isMounted.current) setDeleteError(error instanceof Error ? error.message : 'Kunne ikke slette live-kampen.')
+    } finally {
+      if (isMounted.current) setDeletingCourt(null)
+    }
+  }
+
   useEffect(() => {
     isMounted.current = true
     void refresh()
@@ -61,6 +78,7 @@ export function LiveBoards({ compact = false }: { compact?: boolean }) {
     </div>
     {loaded && !loadError && boards.length === 0 && compact ? <p className="live-empty">Ingen kamper pågår akkurat nå.</p> : null}
     {loaded && !loadError && boards.length === 0 && !compact && <p className="live-empty">Ingen kamper pågår akkurat nå. Oversikten oppdateres automatisk.</p>}
+    {deleteError && <p className="live-boards-error" role="alert">{deleteError}</p>}
     <div className="live-board-grid">
       {boards.map((board) => <article className="live-board" key={board.courtNumber}>
         <header><strong>BANE {board.courtNumber}</strong><span>{board.gameMode === 'cricket' ? 'CRICKET' : board.gameMode} · BEST AV {board.bestOfLegs} · {board.gameMode === '121' ? 'RUNDE' : 'LEGG'} {board.legNumber}</span></header>
@@ -77,6 +95,7 @@ export function LiveBoards({ compact = false }: { compact?: boolean }) {
           })}
         </ul>
         {board.finished && <p className="live-finished">Kampen er ferdig</p>}
+        {canDelete && <button className="live-delete-button" type="button" disabled={deletingCourt !== null} onClick={() => void removeBoard(board)}>{deletingCourt === board.courtNumber ? 'Sletter …' : `Slett live-kamp på bane ${board.courtNumber}`}</button>}
       </article>)}
     </div>
   </section>
