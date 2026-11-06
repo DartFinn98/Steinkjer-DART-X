@@ -3151,7 +3151,7 @@ function App() {
         <section className="setup-layout">
           <div className="setup-copy">
             <p className="eyebrow">KAMPROM / 01</p>
-            <h1>{gameMode === 'cricket' ? 'Cricket' : gameMode === 'stein5kamp' ? 'Steins 5-kamp' : gameMode}<span className="title-period">.</span></h1>
+            <h1 className={gameMode === 'stein5kamp' ? 'title-long' : undefined}>{gameMode === 'cricket' ? 'Cricket' : gameMode === 'stein5kamp' ? 'Steins 5-kamp' : gameMode}<span className="title-period">.</span></h1>
             <p className="intro">{gameMode === 'cricket' ? 'Lukk feltene fra 15 til 20 og bull før motstanderen.' : gameMode === '121' ? 'Start på 121 poeng. Avslutt med en dobbel.' : gameMode === 'stein5kamp' ? 'Konkurrer i fem dartspill. Høyest sammenlagt poengsum vinner.' : 'Følg poengene. Se hvem som leder.'}</p>
             <div className="rules-line"><span>{gameMode === 'cricket' ? '15–20 + BULL' : gameMode === 'stein5kamp' ? 'FEM SPILL' : gameMode}</span><i /> {gameMode === 'cricket' ? 'TRE TREFF LUKKER' : gameMode === 'stein5kamp' ? 'TO SPILLERE' : 'DOBBEL UT'} <i /> {gameMode === 'cricket' ? 'FLERE POENG VINNER' : gameMode === 'stein5kamp' ? 'HØYEST SUM VINNER' : 'FØRST TIL NULL'}</div>
           </div>

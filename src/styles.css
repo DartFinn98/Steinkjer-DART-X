@@ -283,6 +283,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .bull-off-copy { position: relative; z-index: 1; padding-bottom: 35px; animation: rise-in 400ms both; }
 .eyebrow { margin: 0 0 17px; color: var(--green); }
 .setup-copy h1, .game-heading h1 { margin: 0; font-family: var(--serif); font-size: 180px; font-weight: 500; line-height: .78; }
+.setup-copy h1.title-long { font-size: 104px; line-height: .9; }
 .bull-off-copy h1 { margin: 0; font-family: var(--serif); font-size: 116px; font-weight: 500; line-height: .85; }
 .intro { max-width: 340px; margin: 34px 0 26px; color: #51594f; font-family: var(--serif); font-size: 23px; line-height: 1.4; }
 .rules-line { display: flex; align-items: center; gap: 12px; color: var(--muted); }
@@ -754,6 +755,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
   .bull-off-copy { padding: 0; }
   .setup-copy .eyebrow { margin-bottom: 12px; }
   .setup-copy h1 { font-size: 108px; }
+  .setup-copy h1.title-long { font-size: 76px; }
   .bull-off-copy h1 { font-size: 82px; }
   .intro { margin: 17px 0 13px; font-size: 18px; line-height: 1.35; }
   .rules-line { gap: 8px; font-size: 9px; letter-spacing: .8px; }
@@ -798,6 +800,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
   .brand { font-size: 11px; letter-spacing: 1.2px; }
   .topbar { min-height: 59px; }
   .setup-copy h1 { font-size: clamp(72px, 22vw, 100px); }
+  .setup-copy h1.title-long { font-size: clamp(44px, 13vw, 64px); }
   .bull-off-copy h1 { font-size: clamp(58px, 18vw, 76px); }
   .auth-copy h1 { font-size: clamp(68px, 20vw, 92px); }
   .five-kamp-page { padding-top: 26px; }
@@ -882,6 +885,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
   .player-card { padding: 13px 14px 11px; }
   .score-display { font-size: clamp(44px, 8vw, 62px); }
   .setup-copy h1 { font-size: clamp(76px, 12vw, 108px); }
+  .setup-copy h1.title-long { font-size: clamp(56px, 9vw, 76px); }
   .bull-off-copy h1 { font-size: clamp(64px, 10vw, 82px); }
 }
 @media (min-width: 901px) {
