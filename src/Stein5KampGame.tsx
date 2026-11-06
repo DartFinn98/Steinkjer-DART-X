@@ -157,14 +157,15 @@ function evaluatePlayer(entries: PlayerEntries): GameEvaluation {
 type NumberFieldProps = {
   value: string
   label: string
+  caption?: string
   max: number
   disabled?: boolean
   onChange: (value: string) => void
 }
 
-function NumberField({ value, label, max, disabled = false, onChange }: NumberFieldProps) {
+function NumberField({ value, label, caption, max, disabled = false, onChange }: NumberFieldProps) {
   return <label className="five-number-field">
-    <span>{label}</span>
+    {caption && <span>{caption}</span>}
     <input
       aria-label={label}
       disabled={disabled}
@@ -264,6 +265,7 @@ export function Stein5KampGame({ players, onFinish, onExit }: Props) {
               {(['triple', 'double', 'single'] as const).map((kind) => <NumberField
                 disabled={readOnly}
                 key={kind}
+                caption={kind === 'triple' ? 'Trippel' : kind === 'double' ? 'Dobbel' : 'Singel'}
                 label={`${players[playerIndex]}, sektor ${SECTORS[index]}, ${kind === 'triple' ? 'trippel' : kind === 'double' ? 'dobbel' : 'singel'}`}
                 max={3}
                 onChange={(value) => updatePlayer(playerIndex, (current) => {
@@ -319,6 +321,7 @@ export function Stein5KampGame({ players, onFinish, onExit }: Props) {
         <span>Runde {index + 1}</span>
         <NumberField
           disabled={readOnly}
+          caption="Bullseye"
           label={`${players[playerIndex]}, bullworker runde ${index + 1}, bullseye`}
           max={3}
           onChange={(value) => updatePlayer(playerIndex, (current) => {
@@ -330,6 +333,7 @@ export function Stein5KampGame({ players, onFinish, onExit }: Props) {
         />
         <NumberField
           disabled={readOnly}
+          caption="Ytre bull"
           label={`${players[playerIndex]}, bullworker runde ${index + 1}, ytre bull`}
           max={3}
           onChange={(value) => updatePlayer(playerIndex, (current) => {
