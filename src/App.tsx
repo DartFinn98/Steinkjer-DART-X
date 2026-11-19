@@ -3341,6 +3341,13 @@ function App() {
               <div className="avg-right">{(summarizePlayer(players[1], legsWon[players[1].id] ?? 0).average3 || 0).toFixed(2)}</div>
             </div>
           )}
+          {activeTournamentMatch && players.length === 2 && (
+            <div className="tournament-name-bar">
+              <div className="name-left">{players[0]?.name}</div>
+              <div className="name-center">LEGS</div>
+              <div className="name-right">{players[1]?.name}</div>
+            </div>
+          )}
           <div className="game-main-column">
           {activeTournamentMatch && players.length === 2 && (
             <div className="tournament-center-display">
