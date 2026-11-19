@@ -610,6 +610,23 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .tournament-scoreboard .score-entry { display: none; }
 /* Broadcast layout */
 .tournament-scoreboard .game-body { padding: 0; margin: 0; gap: 0; display: grid; grid-template-rows: 100px 1fr auto; min-height: 100vh; }
+.tournament-scoreboard .tournament-header { grid-row: 1; display: grid; grid-template-columns: 180px 1fr 180px; align-items: center; padding: 0 20px; background: #111; border-bottom: 2px solid #333; }
+.tournament-scoreboard .tournament-header .avg-left { font-size: 56px; font-weight: 700; color: #ffcc00; text-align: center; }
+.tournament-scoreboard .tournament-header .avg-right { font-size: 56px; font-weight: 700; color: #ffcc00; text-align: center; }
+.tournament-scoreboard .tournament-header .legs-display { grid-column: 2; display: flex; justify-content: center; align-items: center; gap: 20px; }
+.tournament-scoreboard .tournament-header .legs-display span { font-size: 48px; font-weight: 700; color: #ffcc00; }
+.tournament-scoreboard .tournament-header .legs-display span.leg-won { color: #ffcc00; }
+.tournament-scoreboard .tournament-header .legs-display span.leg-lost { color: #666; }
+/* Tournament dart history panel */
+.tournament-scoreboard .tournament-dart-history { grid-row: 3; grid-column: 1 / -1; padding: 20px 40px; background: #111; border-top: 2px solid #333; display: flex; align-items: center; gap: 40px; }
+.tournament-scoreboard .tournament-dart-history .dart-history-heading { flex: 0 0 auto; }
+.tournament-scoreboard .tournament-dart-history .dart-history-heading h2 { color: #ffcc00; font-size: 20px; }
+.tournament-scoreboard .tournament-dart-history .dart-history-list { display: flex; gap: 15px; list-style: none; padding: 0; margin: 0; flex: 1; overflow-x: auto; }
+.tournament-scoreboard .tournament-dart-history .dart-history-entry { display: flex; flex-direction: column; align-items: center; min-width: 60px; padding: 10px; background: #000; border: 1px solid #333; }
+.tournament-scoreboard .tournament-dart-history .dart-history-entry span { font-size: 10px; color: #666; }
+.tournament-scoreboard .tournament-dart-history .dart-history-entry strong { font-size: 20px; color: #ffcc00; margin: 5px 0; }
+.tournament-scoreboard .tournament-dart-history .dart-history-entry.is-bust strong { color: #ff6b6b; }
+.tournament-scoreboard .tournament-dart-history .dart-history-entry small { font-size: 9px; color: #888; }
 .tournament-scoreboard .game-main-column { grid-row: 2; display: grid; grid-template-columns: 180px 1fr 180px; }
 /* Players grid - display: contents to bypass grid for tournament */
 .tournament-scoreboard .player-grid { display: contents; }
