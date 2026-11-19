@@ -833,7 +833,7 @@ function getTournamentMatchCourtNumber(tournament: ClubTournament, match: Tourna
     ? tournament.participants.find((participant) => participant.signupId === match.playerTwoSignupId)?.poolNumber
     : null
   const poolNumber = match.phase === 'pool' ? match.poolNumber : playerOnePool ?? playerTwoPool
-  return poolNumber && poolNumber > 0 ? ((poolNumber - 1) % 5 + 1) as CourtNumber : 1
+  return poolNumber && poolNumber > 0 && poolNumber <= 4 ? (poolNumber as CourtNumber) : 1
 }
 
 function getNextTournamentMatchForCourt(tournament: ClubTournament, court: CourtNumber): TournamentMatch | null {
