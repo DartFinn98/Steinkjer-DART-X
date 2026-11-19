@@ -312,8 +312,8 @@ function TournamentBoard({
           const playerOne = progress.players[0]
           const playerTwo = progress.players[1]
           const roundLabel = match.phase === 'pool' ? `Pulje ${match.poolNumber}${poolMeetingLabel(match)}` : getRoundLabel(match.roundNumber, cupMatches.filter((item) => item.roundNumber === match.roundNumber).length)
-          const playerOneStats = summaryStats.get(match.playerOneSignupId)
-          const playerTwoStats = summaryStats.get(match.playerTwoSignupId!)
+          const playerOneStats = summarizePlayer(playerOne, progress.legsWon[playerOne.id] ?? 0)
+          const playerTwoStats = summarizePlayer(playerTwo, progress.legsWon[playerTwo.id] ?? 0)
           return <div key={match.id} className="tournament-large-match-card">
             <div className="match-header">
               <span className="match-court">{progress.courtNumber ? `BANE ${progress.courtNumber}` : 'BANE SKAL TILDELES'}</span>
@@ -322,10 +322,10 @@ function TournamentBoard({
             <div className="match-body">
               <div className="player-side player-one">
                 <div className="player-stats">
-                  <div className="stat"><span className="stat-label">DARTS</span><span className="stat-value">{playerOneStats?.dartsThrown ?? 0}</span></div>
-                  <div className="stat"><span className="stat-label">TONS</span><span className="stat-value">{playerOneStats?.tons ?? 0}</span></div>
-                  <div className="stat"><span className="stat-label">180</span><span className="stat-value">{playerOneStats?.oneEighties ?? 0}</span></div>
-                  <div className="stat"><span className="stat-label">BØRK</span><span className="stat-value">{playerOneStats?.checkoutsMissed ?? 0}</span></div>
+                  <div className="stat"><span className="stat-label">DARTS</span><span className="stat-value">{playerOneStats.dartsThrown}</span></div>
+                  <div className="stat"><span className="stat-label">TONS</span><span className="stat-value">{playerOneStats.tons}</span></div>
+                  <div className="stat"><span className="stat-label">180</span><span className="stat-value">{playerOneStats.oneEighties}</span></div>
+                  <div className="stat"><span className="stat-label">HØYESTE</span><span className="stat-value">{playerOneStats.highestVisit}</span></div>
                 </div>
               </div>
               <div className="match-center">
@@ -345,10 +345,10 @@ function TournamentBoard({
               </div>
               <div className="player-side player-two">
                 <div className="player-stats">
-                  <div className="stat"><span className="stat-label">DARTS</span><span className="stat-value">{playerTwoStats?.dartsThrown ?? 0}</span></div>
-                  <div className="stat"><span className="stat-label">TONS</span><span className="stat-value">{playerTwoStats?.tons ?? 0}</span></div>
-                  <div className="stat"><span className="stat-label">180</span><span className="stat-value">{playerTwoStats?.oneEighties ?? 0}</span></div>
-                  <div className="stat"><span className="stat-label">BØRK</span><span className="stat-value">{playerTwoStats?.checkoutsMissed ?? 0}</span></div>
+                  <div className="stat"><span className="stat-label">DARTS</span><span className="stat-value">{playerTwoStats.dartsThrown}</span></div>
+                  <div className="stat"><span className="stat-label">TONS</span><span className="stat-value">{playerTwoStats.tons}</span></div>
+                  <div className="stat"><span className="stat-label">180</span><span className="stat-value">{playerTwoStats.oneEighties}</span></div>
+                  <div className="stat"><span className="stat-label">HØYESTE</span><span className="stat-value">{playerTwoStats.highestVisit}</span></div>
                 </div>
               </div>
             </div>
