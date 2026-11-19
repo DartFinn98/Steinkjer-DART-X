@@ -144,6 +144,25 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .tournament-board-chips > .is-free { background: #175c450c; color: var(--green); }
 .tournament-board-chips > .is-occupied { background: #ec68480d; color: #9b452f; }
 .tournament-board-warning { margin: 0; color: #9b452f; font-size: 11px; line-height: 1.5; }
+.tournament-large-match-display { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 12px; margin: 12px 0 0; }
+.tournament-large-match-card { display: grid; grid-template-rows: auto 1fr auto; gap: 0; border: 2px solid #333; background: #000; color: #fff; overflow: hidden; }
+.match-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; background: #1a1a1a; border-bottom: 1px solid #333; font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; }
+.match-court { color: #ffcc00; }
+.match-round { color: #aaa; }
+.match-body { display: grid; grid-template-columns: 100px 1fr 100px; gap: 12px; padding: 16px; }
+.player-side { display: grid; gap: 10px; }
+.player-stats { display: grid; grid-template-rows: repeat(4, auto); gap: 8px; }
+.stat { display: grid; grid-template-columns: auto 1fr; gap: 6px; align-items: center; }
+.stat-label { font-size: 9px; color: #888; letter-spacing: .3px; white-space: nowrap; }
+.stat-value { font-size: 18px; font-weight: 700; color: #ffcc00; }
+.match-center { display: grid; grid-template-rows: auto auto auto; gap: 16px; align-items: center; justify-items: center; }
+.player-names { display: grid; gap: 4px; align-items: center; }
+.player-name { font-size: 13px; font-weight: 700; text-align: center; overflow-wrap: break-word; }
+.legs-won { font-size: 20px; font-weight: 700; color: #ffcc00; }
+.match-score { display: grid; grid-template-columns: 60px auto 60px; gap: 8px; align-items: center; justify-items: center; }
+.current-score { font-size: 36px; font-weight: 700; color: #ffcc00; font-family: var(--mono); }
+.separator { font-size: 24px; color: #666; }
+.tournament-play-button.large { grid-column: 1 / -1; min-height: 40px; margin-top: 8px; }
 .tournament-day-match-list, .tournament-day-queue ol { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
 .tournament-day-match-list > li, .tournament-day-queue li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 10px; border: 1px solid #d9d7ce; }
 .tournament-day-match-info { display: grid; min-width: 0; gap: 3px; font-size: 11px; }
@@ -359,6 +378,15 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
   .live-boards-updated, .live-boards-error { font-size: 10px; }
   .live-board { padding: 12px; }
   .live-board header span { font-size: .75rem; }
+  .tournament-large-match-display { grid-template-columns: 1fr; }
+  .match-body { grid-template-columns: 60px 1fr 60px; gap: 8px; padding: 12px; }
+  .player-side { gap: 6px; }
+  .player-stats { gap: 6px; }
+  .stat-label { font-size: 8px; }
+  .stat-value { font-size: 14px; }
+  .player-name { font-size: 11px; }
+  .legs-won { font-size: 16px; }
+  .current-score { font-size: 28px; }
 }
 .next-match-card { display: grid; gap: 2px; margin-top: 12px; padding: 12px 14px; border: 2px solid var(--green, #175c45); border-radius: 10px; background: rgba(255, 255, 255, 0.55); }
 .next-match-card strong { font-size: 1.25rem; }

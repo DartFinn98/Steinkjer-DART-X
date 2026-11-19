@@ -306,6 +306,55 @@ function TournamentBoard({
             ? <p className="tournament-board-warning" role="status">Tildel bane til {unassignedActiveMatches.length} pågående {unassignedActiveMatches.length === 1 ? 'kamp' : 'kamper'} før ledige baner kan bekreftes eller nye kamper startes.</p>
             : <div className="tournament-board-chips">{([1, 2, 3, 4, 5] as const).map((court) => <span className={assignedBoards.has(court) ? 'is-occupied' : 'is-free'} key={court}>Bane {court} · {assignedBoards.has(court) ? 'I bruk' : 'Ledig'}</span>)}</div>}
         </div>
+        {activeMatches.length > 0 && <div className="tournament-large-match-display">{activeMatches.map((match) => {
+          const progress = match.inProgress
+          if (!progress || progress.players.length !== 2) return null
+          const playerOne = progress.players[0]
+          const playerTwo = progress.players[1]
+          const roundLabel = match.phase === 'pool' ? `Pulje ${match.poolNumber}${poolMeetingLabel(match)}` : getRoundLabel(match.roundNumber, cupMatches.filter((item) => item.roundNumber === match.roundNumber).length)
+          const playerOneStats = summaryStats.get(match.playerOneSignupId)
+          const playerTwoStats = summaryStats.get(match.playerTwoSignupId!)
+          return <div key={match.id} className="tournament-large-match-card">
+            <div className="match-header">
+              <span className="match-court">{progress.courtNumber ? `BANE ${progress.courtNumber}` : 'BANE SKAL TILDELES'}</span>
+              <span className="match-round">{roundLabel}</span>
+            </div>
+            <div className="match-body">
+              <div className="player-side player-one">
+                <div className="player-stats">
+                  <div className="stat"><span className="stat-label">DARTS</span><span className="stat-value">{playerOneStats?.dartsThrown ?? 0}</span></div>
+                  <div className="stat"><span className="stat-label">TONS</span><span className="stat-value">{playerOneStats?.tons ?? 0}</span></div>
+                  <div className="stat"><span className="stat-label">180</span><span className="stat-value">{playerOneStats?.oneEighties ?? 0}</span></div>
+                  <div className="stat"><span className="stat-label">BØRK</span><span className="stat-value">{playerOneStats?.checkoutsMissed ?? 0}</span></div>
+                </div>
+              </div>
+              <div className="match-center">
+                <div className="player-names">
+                  <span className="player-name">{playerOne.name}</span>
+                  <span className="legs-won">{progress.legsWon[playerOne.id] ?? 0}</span>
+                </div>
+                <div className="match-score">
+                  <span className="current-score">{playerOne.score}</span>
+                  <span className="separator">–</span>
+                  <span className="current-score">{playerTwo.score}</span>
+                </div>
+                <div className="player-names">
+                  <span className="legs-won">{progress.legsWon[playerTwo.id] ?? 0}</span>
+                  <span className="player-name">{playerTwo.name}</span>
+                </div>
+              </div>
+              <div className="player-side player-two">
+                <div className="player-stats">
+                  <div className="stat"><span className="stat-label">DARTS</span><span className="stat-value">{playerTwoStats?.dartsThrown ?? 0}</span></div>
+                  <div className="stat"><span className="stat-label">TONS</span><span className="stat-value">{playerTwoStats?.tons ?? 0}</span></div>
+                  <div className="stat"><span className="stat-label">180</span><span className="stat-value">{playerTwoStats?.oneEighties ?? 0}</span></div>
+                  <div className="stat"><span className="stat-label">BØRK</span><span className="stat-value">{playerTwoStats?.checkoutsMissed ?? 0}</span></div>
+                </div>
+              </div>
+            </div>
+            {isAdmin && progress.courtNumber && <button className="tournament-play-button large" type="button" disabled={busy || !canResumeMatch} onClick={() => onPlayMatch(match)}>Spill på bane {progress.courtNumber}</button>}
+          </div>
+        })}</div>}
         {activeMatches.length > 0 && <ul className="tournament-day-match-list">{activeMatches.map((match) => {
           const progress = match.inProgress
           if (!progress) return null
