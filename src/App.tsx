@@ -4,6 +4,7 @@ import { getCheckoutHint } from './checkout'
 import { addAdminGuestSignup, addTournamentCupRound, beginGuestSession, clearLiveBoard, deleteAllClubTournaments, deleteClubDocument, deleteClubSignup, deleteClubTournament, deleteSavedMatch, deleteSavedPlayer, downloadClubDocument, editFinishedTournamentMatch, endGuestSession, finishTournamentMatch, getGuestDisplayName, loadClubAdminStatus, loadClubAdmins, loadClubDocuments, loadClubSignups, loadClubTournaments, loadLinkedPlayerProfile, loadPublicRecentMatches, loadRegisteredPlayerNames, loadSavedData, publishLiveBoard, saveClubSignup, saveClubTournament, saveFinishedMatch, saveLinkedPlayerId, savePlayers, saveTournamentMatchProgress, sendMatchReport, setClubAdminRole, syncPendingChanges, undoFinishedTournamentMatch, updateClubSignup, updateTournamentParticipantAvailability, uploadClubDocument, uploadProfileAvatar } from './database'
 import type { ClubAdmin, ClubDocument, ClubSignup, ClubTournament, PendingSyncIssue, SavedData, TournamentGameHistory, TournamentMatch, TournamentMatchProgress, TournamentGamePlayer } from './database'
 import { supabase } from './supabase'
+import { exportMatchesPdf, exportTournamentPdf } from './exportPdf'
 import { InstallAppButton } from './InstallApp'
 import { LiveBoards } from './LiveBoards'
 import type { Session } from '@supabase/supabase-js'
@@ -279,6 +280,7 @@ function TournamentBoard({
       <div className="tournament-heading-actions">
         {tournament && activeMatchCount > 0 && <p className="tournament-active-count" role="status">{activeMatchCount} / 5 kamper pågår på banene</p>}
         {tournament && isAdmin && <button className="tournament-print-button" type="button" onClick={() => window.print()}>Skriv ut skjemaer</button>}
+        {tournament && <button className="tournament-print-button" type="button" onClick={() => { if (!exportTournamentPdf(tournament, formatClubDate(tournament.eventDate))) window.alert('Nettleseren blokkerte utskriftsvinduet. Tillat popup og prøv igjen.') }}>Eksporter resultater (PDF)</button>}
         {!tournament && isAdmin && <button className="primary-button admin-export-button" type="button" disabled={busy || signups.length < 2} onClick={onDraw}>Trekk puljer</button>}
       </div>
     </div>
@@ -670,7 +672,7 @@ const CRICKET_DART_OPTION_GROUPS = DART_OPTION_GROUPS.map((group) => ({
 })).filter((group) => group.options.length > 0)
 
 const FUNCTION_KEY_SCORES: Record<string, number> = {
-  F1: 60, F2: 100, F3: 140, F4: 180, F5: 1, F6: 26, F7: 41, F8: 45, F9: 85, F10: 100,
+  F1: 60, F2: 81, F3: 85, F4: 95, F5: 97, F6: 99, F7: 100, F8: 121, F9: 125, F10: 135, F11: 140, F12: 180,
 }
 
 const QUICK_VISITS: Record<number, DartInputs> = {
@@ -3209,7 +3211,7 @@ function App() {
             <p className="form-note">{gameMode === 'stein5kamp' ? 'Resultatet lagres i kamparkivet når alle fem spillene er registrert. ' : playerCount > 1 ? useCoinToss ? 'Myntkastet bestemmer rekkefølgen for bullkastet. ' : 'Uten myntkast følger rekkefølgen spillerlisten. ' : ''}Spillernavn lagres automatisk.</p>
           </form>
           {savedData.matches.length > 0 && <section className="saved-history" aria-label="Kamphistorikk">
-            <div className="saved-history-heading"><div><p className="eyebrow">LAGRET HISTORIKK</p><h2>Kamparkiv</h2></div><span>{filteredSavedMatches.length} / {savedData.matches.length} KAMPER</span></div>
+            <div className="saved-history-heading"><div><p className="eyebrow">LAGRET HISTORIKK</p><h2>Kamparkiv</h2></div><span>{filteredSavedMatches.length} / {savedData.matches.length} KAMPER</span><button type="button" disabled={filteredSavedMatches.length === 0} onClick={() => { if (!exportMatchesPdf(filteredSavedMatches)) setDatabaseMessage('Nettleseren blokkerte utskriftsvinduet. Tillat popup og prøv igjen.') }}>Eksporter PDF</button></div>
             <div className="history-filters">
               <label className="history-filter-search"><span>SØK SPILLER ELLER LAG</span><input type="search" value={historySearch} onChange={(event) => setHistorySearch(event.target.value)} placeholder="Navn" /></label>
               <label><span>SPILLTYPE</span><select value={historyGameMode} onChange={(event) => setHistoryGameMode(event.target.value as GameMode | 'all')}><option value="all">Alle</option><option value="501">501</option><option value="cricket">Cricket</option><option value="121">121 utgang</option><option value="stein5kamp">Steins 5-kamp</option></select></label>
