@@ -3332,12 +3332,19 @@ function App() {
           {activeTournamentMatch && <div className={`tournament-resume-status${tournamentMatchMessage.includes('ikke') ? ' is-error' : ''}`} role={tournamentMatchMessage.includes('ikke') ? 'alert' : 'status'}><span>{tournamentMatchMessage || 'Turneringskampen lagres automatisk, så den kan fortsettes senere.'}{activeTournamentRefereeName && <strong>Dommer: {activeTournamentRefereeName}</strong>}</span>{tournamentMatchMessage.includes('gjenopptakelse') && !matchWinnerId && <button className="text-button" type="button" onClick={retryTournamentProgressSave}>Prøv lagring på nytt</button>}</div>}
           {gameMode === '501' && dartLimitBullOff && !winnerId && <div className="bull-trigger" role="alert"><div><span>42 PILER HVER BRUKT</span><strong>Leggen er ikke avgjort. Kast mot bull, og trykk på navnet til den som kom nærmest.</strong></div></div>}
           <div className="game-body">
+          {activeTournamentMatch && players.length === 2 && (
+            <div className="tournament-header">
+              <div className="avg-left">{(summarizePlayer(players[0], legsWon[players[0].id] ?? 0).average3 || 0).toFixed(2)}</div>
+              <div className="flag">🇳🇴</div>
+              <div className="legs-display"><span>{legsWon[players[0].id] ?? 0}</span><span>{legsWon[players[1].id] ?? 0}</span></div>
+              <div className="flag">🇳🇴</div>
+              <div className="avg-right">{(summarizePlayer(players[1], legsWon[players[1].id] ?? 0).average3 || 0).toFixed(2)}</div>
+            </div>
+          )}
           <div className="game-main-column">
           {activeTournamentMatch && players.length === 2 && (
             <div className="tournament-center-display">
-              <div className="center-player"><h2>{players[0]?.name}</h2><div className="center-score">{players[0]?.score}</div></div>
-              <div className="center-divider"></div>
-              <div className="center-player"><h2>{players[1]?.name}</h2><div className="center-score">{players[1]?.score}</div></div>
+              <div style={{ flex: 1 }}></div>
             </div>
           )}
           <div className={`player-grid players-${players.length}`}>

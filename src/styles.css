@@ -608,62 +608,45 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .tournament-scoreboard .tournament-resume-status { display: none; }
 .tournament-scoreboard .bull-trigger { display: none; }
 .tournament-scoreboard .score-entry { display: none; }
-/* Broadcast layout */
-.tournament-scoreboard .game-body { padding: 0; margin: 0; gap: 0; display: grid; grid-template-rows: 100px 1fr auto; min-height: 100vh; }
-.tournament-scoreboard .tournament-header { grid-row: 1; display: grid; grid-template-columns: 180px 1fr 180px; align-items: center; padding: 0 20px; background: #111; border-bottom: 2px solid #333; }
-.tournament-scoreboard .tournament-header .avg-left { font-size: 56px; font-weight: 700; color: #ffcc00; text-align: center; }
-.tournament-scoreboard .tournament-header .avg-right { font-size: 56px; font-weight: 700; color: #ffcc00; text-align: center; }
-.tournament-scoreboard .tournament-header .legs-display { grid-column: 2; display: flex; justify-content: center; align-items: center; gap: 20px; }
-.tournament-scoreboard .tournament-header .legs-display span { font-size: 48px; font-weight: 700; color: #ffcc00; }
-.tournament-scoreboard .tournament-header .legs-display span.leg-won { color: #ffcc00; }
-.tournament-scoreboard .tournament-header .legs-display span.leg-lost { color: #666; }
-/* Tournament dart history panel */
-.tournament-scoreboard .tournament-dart-history { grid-row: 3; grid-column: 1 / -1; padding: 20px 40px; background: #111; border-top: 2px solid #333; display: flex; align-items: center; gap: 40px; }
-.tournament-scoreboard .tournament-dart-history .dart-history-heading { flex: 0 0 auto; }
-.tournament-scoreboard .tournament-dart-history .dart-history-heading h2 { color: #ffcc00; font-size: 20px; }
-.tournament-scoreboard .tournament-dart-history .dart-history-list { display: flex; gap: 15px; list-style: none; padding: 0; margin: 0; flex: 1; overflow-x: auto; }
-.tournament-scoreboard .tournament-dart-history .dart-history-entry { display: flex; flex-direction: column; align-items: center; min-width: 60px; padding: 10px; background: #000; border: 1px solid #333; }
-.tournament-scoreboard .tournament-dart-history .dart-history-entry span { font-size: 10px; color: #666; }
-.tournament-scoreboard .tournament-dart-history .dart-history-entry strong { font-size: 20px; color: #ffcc00; margin: 5px 0; }
-.tournament-scoreboard .tournament-dart-history .dart-history-entry.is-bust strong { color: #ff6b6b; }
-.tournament-scoreboard .tournament-dart-history .dart-history-entry small { font-size: 9px; color: #888; }
-.tournament-scoreboard .game-main-column { grid-row: 2; display: grid; grid-template-columns: 180px 1fr 180px; }
-/* Players grid - display: contents to bypass grid for tournament */
+/* Broadcast layout - full viewport 3-column design */
+.tournament-scoreboard .game-body { padding: 0; margin: 0; gap: 0; display: grid; grid-template-rows: 90px 1fr; min-height: 100vh; background: #000; }
+/* Top bar: Average | Flag | LEGS | Flag | Average */
+.tournament-scoreboard .tournament-header { grid-row: 1; display: grid; grid-template-columns: 150px auto 1fr auto 150px; align-items: center; justify-items: center; gap: 20px; padding: 0 20px; background: #111; border-bottom: 3px solid #333; color: #ffcc00; }
+.tournament-scoreboard .tournament-header .avg-left { font-size: 48px; font-weight: 700; text-align: center; }
+.tournament-scoreboard .tournament-header .flag { font-size: 32px; }
+.tournament-scoreboard .tournament-header .legs-display { grid-column: 3; display: flex; justify-content: center; align-items: center; gap: 30px; font-size: 48px; font-weight: 700; }
+.tournament-scoreboard .tournament-header .avg-right { font-size: 48px; font-weight: 700; text-align: center; }
+/* Main area: Left panel | Center display | Right panel */
+.tournament-scoreboard .game-main-column { grid-row: 2; display: grid; grid-template-columns: 180px 1fr 180px; gap: 0; overflow: hidden; }
+/* Players grid - display: contents to position in columns */
 .tournament-scoreboard .player-grid { display: contents; }
-/* Center display for tournament mode */
-.tournament-scoreboard .tournament-center-display { grid-column: 2; padding: 40px 20px; background: #000; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 30px; }
-.tournament-scoreboard .tournament-center-display .center-player { display: flex; flex-direction: column; align-items: center; gap: 15px; }
-.tournament-scoreboard .tournament-center-display .center-player h2 { font-size: 28px; font-weight: 700; color: #fff; margin: 0; }
-.tournament-scoreboard .tournament-center-display .center-score { font-size: 120px; color: #ffcc00; font-weight: 700; line-height: 1; }
-.tournament-scoreboard .tournament-center-display .center-divider { width: 100%; height: 2px; background: #333; }
-/* Tournament mode: position player cards to outer columns */
-.tournament-scoreboard .player-card:nth-child(1) { grid-column: 1; padding: 30px 15px; background: #000; border-right: 3px solid #ffcc00; display: flex; flex-direction: column; justify-content: flex-start; align-items: center; gap: 15px; }
-.tournament-scoreboard .player-card:nth-child(2) { grid-column: 3; padding: 30px 15px; background: #000; border-left: 3px solid #ffcc00; display: flex; flex-direction: column; justify-content: flex-start; align-items: center; gap: 15px; }
-/* Central column - will be added via pseudo-element or separate div */
-.tournament-scoreboard .game-main-column::before { content: ''; grid-column: 2; background: #000; }
-/* Player name styling */
-.tournament-scoreboard .player-name-wrap { flex-direction: row; gap: 8px; align-items: center; justify-content: center; }
+/* Center display - large play area with silver/gray background */
+.tournament-scoreboard .tournament-center-display { grid-column: 2; padding: 20px; background: #c0c0c0; border: 4px solid #ffcc00; display: flex; justify-content: center; align-items: center; min-height: 100%; }
+.tournament-scoreboard .tournament-center-display .center-player { display: none; }
+.tournament-scoreboard .tournament-center-display .center-divider { display: none; }
+/* Left player panel */
+.tournament-scoreboard .player-card:nth-child(1) { grid-column: 1; padding: 20px 15px; background: #000; border-right: 3px solid #ffcc00; display: flex; flex-direction: column; justify-content: flex-start; align-items: center; gap: 12px; overflow-y: auto; }
+/* Right player panel */
+.tournament-scoreboard .player-card:nth-child(2) { grid-column: 3; padding: 20px 15px; background: #000; border-left: 3px solid #ffcc00; display: flex; flex-direction: column; justify-content: flex-start; align-items: center; gap: 12px; overflow-y: auto; }
+/* Player name styling - small and clean */
+.tournament-scoreboard .player-name-wrap { flex-direction: column; gap: 0; align-items: center; justify-content: center; order: -1; }
 .tournament-scoreboard .player-name-wrap .player-number { display: none; }
-.tournament-scoreboard .player-name-wrap h2 { font-size: 24px; font-weight: 700; text-align: center; color: #fff; white-space: normal; margin: 0; }
+.tournament-scoreboard .player-name-wrap h2 { font-size: 13px; font-weight: 700; text-align: center; color: #fff; white-space: normal; word-wrap: break-word; margin: 0; line-height: 1.2; }
 /* Hide team tag and status tags */
 .tournament-scoreboard .player-team-tag { display: none; }
 .tournament-scoreboard .turn-tag, .tournament-scoreboard .winner-tag { display: none; }
-/* Score display - huge in center */
-.tournament-scoreboard .score-display { margin: 20px 0 10px; font-size: 120px; color: #ffcc00; font-weight: 700; line-height: 1; }
-.tournament-scoreboard .score-edit-button { background: none; border: none; cursor: default; }
-.tournament-scoreboard .score-edit-cue { display: none; }
+/* Score display - removed from tournament display (shown in center area) */
+.tournament-scoreboard .score-display { display: none; }
 .tournament-scoreboard .cricket-mark-board { display: none; }
 /* Leg numbers display */
-.tournament-scoreboard .legs-progress { margin: 10px 0 20px; }
-.tournament-scoreboard .legs-progress > div { display: none; }
-.tournament-scoreboard .legs-progress > span { font-size: 48px; color: #ffcc00; font-weight: 700; }
-/* Player stats - vertical stack with big numbers */
-.tournament-scoreboard .player-card-top { flex-direction: column; gap: 0; justify-content: flex-start; min-height: auto; }
-.tournament-scoreboard .player-stats { display: grid; grid-template-rows: repeat(7, auto); gap: 18px; }
-.tournament-scoreboard .player-stats > div { display: grid; grid-template-rows: auto auto; gap: 2px; align-items: center; text-align: center; }
-.tournament-scoreboard .player-stats strong { font-size: 42px; color: #ffcc00; font-weight: 700; line-height: 1; }
-.tournament-scoreboard .player-stats span { font-size: 9px; color: #666; letter-spacing: 0.8px; text-transform: uppercase; }
-.tournament-scoreboard .player-card-bottom { border-top: none; padding-top: 0; display: none; }
+.tournament-scoreboard .legs-progress { display: none; }
+/* Player stats - vertical stack with smaller numbers */
+.tournament-scoreboard .player-card-top { flex-direction: column; gap: 0; justify-content: flex-start; min-height: auto; align-items: center; width: 100%; }
+.tournament-scoreboard .player-stats { display: grid; grid-template-columns: auto auto; gap: 6px 8px; width: 100%; }
+.tournament-scoreboard .player-stats > div { display: grid; grid-template-rows: auto auto; gap: 1px; align-items: center; text-align: center; }
+.tournament-scoreboard .player-stats strong { font-size: 16px; color: #ffcc00; font-weight: 700; line-height: 1; }
+.tournament-scoreboard .player-stats span { font-size: 7px; color: #666; letter-spacing: 0.5px; text-transform: uppercase; }
+.tournament-scoreboard .player-card-bottom { display: none; }
 .tournament-scoreboard .winner-banner { display: none; }
 .game-heading { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 30px; }
 .game-heading .eyebrow { margin-bottom: 15px; }
