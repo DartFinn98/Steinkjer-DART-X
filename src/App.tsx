@@ -3333,6 +3333,13 @@ function App() {
           {gameMode === '501' && dartLimitBullOff && !winnerId && <div className="bull-trigger" role="alert"><div><span>42 PILER HVER BRUKT</span><strong>Leggen er ikke avgjort. Kast mot bull, og trykk på navnet til den som kom nærmest.</strong></div></div>}
           <div className="game-body">
           <div className="game-main-column">
+          {activeTournamentMatch && players.length === 2 && (
+            <div className="tournament-center-display">
+              <div className="center-player"><h2>{players[0]?.name}</h2><div className="center-score">{players[0]?.score}</div></div>
+              <div className="center-divider"></div>
+              <div className="center-player"><h2>{players[1]?.name}</h2><div className="center-score">{players[1]?.score}</div></div>
+            </div>
+          )}
           <div className={`player-grid players-${players.length}`}>
             {players.map((player, index) => {
               const isActive = index === activePlayer && !winnerId
