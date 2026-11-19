@@ -3321,7 +3321,7 @@ function App() {
           </div>
         </section>
       ) : (
-        <section className="game-layout">
+        <section className={`game-layout${activeTournamentMatch ? ' tournament-scoreboard' : ''}`}>
           <div className="game-heading">
             <div><p className="eyebrow">{matchWinnerId ? <>KAMPEN ER AVGJORT <span className="heading-slash">/</span> BEST AV {bestOfLegs}</> : <>KAMPROM / 01 <span className="heading-slash">/</span> {roundWord} {String(legNumber).padStart(2, '0')} <span className="heading-slash">/</span> BEST AV {bestOfLegs}</>}</p><h1>{gameMode === 'cricket' ? 'Cricket' : gameMode}<span className="title-period">.</span></h1></div>
             <div className="game-actions">

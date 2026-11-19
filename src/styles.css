@@ -603,6 +603,26 @@ button:focus-visible, input:focus-visible { outline: 3px solid #ec6848a8; outlin
 .five-history-scores li { display: flex; justify-content: space-between; gap: 8px; padding: 8px; border: 1px solid var(--line); font-size: 13px; }
 .five-history-scores li strong { color: var(--green); white-space: nowrap; }
 .game-layout { max-width: 1180px; margin: 0 auto; padding: 48px 0 0; animation: rise-in 400ms both; }
+.game-layout.tournament-scoreboard { max-width: none; padding: 0; background: #000; color: #fff; }
+.tournament-scoreboard .game-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; padding: 16px; background: #1a1a1a; border-bottom: 2px solid #333; }
+.tournament-scoreboard .game-heading h1 { font-size: 48px; color: #ffcc00; }
+.tournament-scoreboard .game-heading .eyebrow { margin-bottom: 10px; color: #888; }
+.tournament-scoreboard .game-actions { gap: 12px; }
+.tournament-scoreboard .game-body { gap: 0; }
+.tournament-scoreboard .player-grid { grid-template-columns: 100px 1fr 100px; gap: 20px; padding: 20px; }
+.tournament-scoreboard .player-card { background: transparent; border: none; padding: 0; }
+.tournament-scoreboard .player-card.is-active, .tournament-scoreboard .player-card.is-winner { border: none; box-shadow: none; }
+.tournament-scoreboard .player-card-top { flex-direction: column; gap: 15px; min-height: auto; justify-content: flex-start; }
+.tournament-scoreboard .player-name-wrap { flex-direction: column; gap: 8px; }
+.tournament-scoreboard .player-name-wrap h2 { font-size: 16px; white-space: normal; }
+.tournament-scoreboard .turn-tag, .tournament-scoreboard .winner-tag { margin-top: 10px; }
+.tournament-scoreboard .score-display { margin: 20px 0 25px; font-size: 48px; color: #ffcc00; }
+.tournament-scoreboard .player-stats { display: grid; grid-template-rows: repeat(4, auto); gap: 12px; }
+.tournament-scoreboard .player-stats > div { display: grid; grid-template-columns: auto 1fr; gap: 6px; align-items: center; }
+.tournament-scoreboard .player-stats strong { font-size: 20px; color: #ffcc00; }
+.tournament-scoreboard .player-stats span { font-size: 10px; color: #888; }
+.tournament-scoreboard .legs-progress { margin: 20px 0; }
+.tournament-scoreboard .player-card-bottom { border-top: none; padding-top: 10px; }
 .game-heading { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 30px; }
 .game-heading .eyebrow { margin-bottom: 15px; }
 .game-heading h1 { font-size: 78px; }
