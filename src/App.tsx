@@ -2483,6 +2483,14 @@ function App() {
       setActiveTournamentMatch(null)
       setSavedTournamentResultDate(activeMatch.eventDate)
       setTournamentMatchMessage('Turneringsresultatet er registrert automatisk.')
+      
+      // Automatically start next queued match if available
+      const nextMatch = getNextQueuedTournamentMatch(updatedTournament)
+      if (nextMatch && !nextMatch.inProgress && nextMatch.playerTwoSignupId && nextMatch.winnerSignupId === null) {
+        setTimeout(() => {
+          startTournamentMatch(nextMatch, updatedTournament)
+        }, 1000)
+      }
     } catch (error) {
       const details = tournamentErrorMessage(error, 'Ukjent lagringsfeil.')
       setTournamentMatchMessage(`Kampen er ferdig, men turneringsresultatet eller neste cuprunde kunne ikke lagres. ${details}`)
